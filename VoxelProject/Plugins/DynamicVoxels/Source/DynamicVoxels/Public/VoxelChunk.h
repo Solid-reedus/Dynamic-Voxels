@@ -21,11 +21,19 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     UProceduralMeshComponent* ProceduralMesh = nullptr;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UMaterialInstanceDynamic* MaterialInstance = nullptr;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UTexture2D* VoxelDataTexture = nullptr;
+
     // Sets default values for this actor's properties
     AVoxelChunk();
 
     uint8 GetVoxel(const FUint32Vector3& position) const;
     void SetVoxel(const FUint32Vector3& position, uint8 value);
+
+    void RegisterMaterial(UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
 
 protected:
     // Called when the game starts or when spawned
