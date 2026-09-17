@@ -9,17 +9,25 @@
 UCLASS()
 class DYNAMICVOXELS_API AVoxelWorld : public AActor
 {
-	GENERATED_BODY()
-	
-public:	
-	// Sets default values for this actor's properties
-	AVoxelWorld();
+    GENERATED_BODY()
+
+public:
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UTexture2DArray* VoxelTextures = nullptr;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UMaterial* BaseMaterial = nullptr;
+
+    // Sets default values for this actor's properties
+    AVoxelWorld();
 
 protected:
-	// Called when the game starts or when spawned
-	virtual void BeginPlay() override;
+    // Called when the game starts or when spawned
+    virtual void BeginPlay() override;
 
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
+    // Called every frame
+    virtual void Tick(float DeltaTime) override;
+
+private:
+    void LoadBaseMaterial();
 };

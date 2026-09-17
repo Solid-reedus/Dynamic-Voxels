@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "VoxelChunk.h"
+#include "Engine/Texture2DArray.h"
 
 // Sets default values
 AVoxelChunk::AVoxelChunk()
@@ -39,6 +40,38 @@ void AVoxelChunk::SetVoxel(const FUint32Vector3& position, uint8 value)
     m_voxelData[position.Z * VOXEL_DATA_SIZE * VOXEL_DATA_SIZE + position.Y * VOXEL_DATA_SIZE + position.X] = value;
 }
 
+void AVoxelChunk::RegisterMaterial(UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
+{
+    if (baseMaterial && voxelTextures)
+    {
+        // Create texture to store voxel data
+        uint32 textureHeight = m_voxelData.Num() / VOXEL_DATA_SIZE;
+
+        VoxelDataTexture = UTexture2D::CreateTransient(VOXEL_DATA_SIZE, textureHeight, PF_R8);
+        VoxelDataTexture->CompressionSettings = TextureCompressionSettings::TC_Grayscale;
+        VoxelDataTexture->SRGB = 0;
+        VoxelDataTexture->Filter = TextureFilter::TF_Nearest;
+        VoxelDataTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
+        VoxelDataTexture->CompressionNone = 1;
+
+        // Upload voxel data to texture
+        void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(TargetTextureData, m_voxelData.GetData(), m_voxelData.Num());
+
+        VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+        VoxelDataTexture->UpdateResource();
+
+        // Create material instance for chunk mesh
+        MaterialInstance = UMaterialInstanceDynamic::Create(baseMaterial, this);
+        MaterialInstance->SetTextureParameterValue(TEXT("VoxelTextures"), voxelTextures);
+        MaterialInstance->SetTextureParameterValue(TEXT("VoxelDataTexture"), VoxelDataTexture);
+
+        ProceduralMesh->SetMaterial(0, MaterialInstance);
+    }
+    else
+        UE_LOG(LogTemp, Warning, TEXT("Missing voxel texture 2D array, cannot assign material!"));
+}
+
 // Called when the game starts or when spawned
 void AVoxelChunk::BeginPlay()
 {
@@ -50,26 +83,40 @@ void AVoxelChunk::BeginPlay()
 
 void AVoxelChunk::GenerateVoxelData()
 {
-    FVector worldPosition = GetActorLocation();
-    FUint32Vector3 relativePosition = FUint32Vector3(static_cast<uint32>(worldPosition.X),
-                                                     static_cast<uint32>(worldPosition.Y),
-                                                     static_cast<uint32>(worldPosition.Z)) /
+    FVector actorPosition = GetActorLocation();
+    FUint32Vector3 relativePosition = FUint32Vector3(static_cast<uint32>(actorPosition.X),
+                                                     static_cast<uint32>(actorPosition.Y),
+                                                     static_cast<uint32>(actorPosition.Z)) /
                                       VOXEL_SIZE;
 
     // Initialize voxel data to 0
     m_voxelData.Init(0, VOXEL_DATA_SIZE * VOXEL_DATA_SIZE * VOXEL_DATA_SIZE);
 
+    // Basic terrain generation, will be optimized and improved in the future
     for (uint32 z = 0; z < VOXEL_DATA_SIZE; z++)
     {
         for (uint32 y = 0; y < VOXEL_DATA_SIZE; y++)
         {
             for (uint32 x = 0; x < VOXEL_DATA_SIZE; x++)
             {
-                FUint32Vector3 localPosition = relativePosition + FUint32Vector3(x, y, z);
+                FUint32Vector3 worldPosition = relativePosition + FUint32Vector3(x, y, z);
+                float perlinValue = FMath::PerlinNoise3D(FVector(worldPosition) / 16.0);
 
-                float perlinValue = FMath::PerlinNoise3D(FVector(localPosition) / 16.0);
+                float falloff = (64.0f - static_cast<float>(worldPosition.Z)) / 32.0f - 1.0f;
+                perlinValue += falloff;
 
-                if (perlinValue > 0.2f) SetVoxel(FUint32Vector3(x, y, z), 1);
+                if (perlinValue > 0.2f)
+                {
+                    SetVoxel(FUint32Vector3(x, y, z), 1);
+
+                    FUint32Vector3 upPosition = worldPosition + FUint32Vector3(0, 0, 1);
+                    float perlinValueUp = FMath::PerlinNoise3D(FVector(upPosition) / 16.0);
+
+                    falloff = (64.0f - static_cast<float>(upPosition.Z)) / 32.0f - 1.0f;
+                    perlinValueUp += falloff;
+
+                    if (perlinValueUp <= 0.2f) SetVoxel(FUint32Vector3(x, y, z), 2);
+                }
             }
         }
     }
