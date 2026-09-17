@@ -18,21 +18,22 @@ void AVoxelWorld::BeginPlay()
 
     LoadBaseMaterial();
 
-    static float chunkWorldSize = static_cast<float>(AVoxelChunk::VOXEL_CHUNK_SIZE * AVoxelChunk::VOXEL_SIZE);
+    float chunkWorldSize = static_cast<float>(AVoxelChunk::VOXEL_CHUNK_SIZE * VoxelSize);
 
     // For now just spawn a 5x5x5 area of chunks
     for (int x = 0; x < 10; x++)
     {
         for (int y = 0; y < 10; y++)
         {
-            for (int z = 0; z < 2; z++)
+            for (int z = 0; z < 4; z++)
             {
                 FVector location(chunkWorldSize * x, chunkWorldSize * y, chunkWorldSize * z);
                 FRotator rotation(0.0f, 0.0f, 0.0f);
                 FActorSpawnParameters spawnInfo = {};
 
                 AVoxelChunk* voxelChunk = GetWorld()->SpawnActor<AVoxelChunk>(location, rotation, spawnInfo);
-                voxelChunk->RegisterMaterial(BaseMaterial, VoxelTextures);
+                voxelChunk->GenerateVoxelData(VoxelSize);
+                voxelChunk->GenerateVoxelMesh(VoxelSize, BaseMaterial, VoxelTextures);
             }
         }
     }

@@ -15,6 +15,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     UTexture2DArray* VoxelTextures = nullptr;
 
+    UPROPERTY(EditAnywhere)
+    uint32 VoxelSize = 100;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     UMaterial* BaseMaterial = nullptr;
 

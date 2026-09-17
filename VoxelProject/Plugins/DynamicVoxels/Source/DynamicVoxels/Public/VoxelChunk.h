@@ -16,7 +16,6 @@ public:
     // TODO(David): Make these UPROPERTY instead
     static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
     static constexpr uint32 VOXEL_DATA_SIZE = VOXEL_CHUNK_SIZE + 2;
-    static constexpr uint32 VOXEL_SIZE = 100;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     UProceduralMeshComponent* ProceduralMesh = nullptr;
@@ -33,13 +32,13 @@ public:
     uint8 GetVoxel(const FUint32Vector3& position) const;
     void SetVoxel(const FUint32Vector3& position, uint8 value);
 
-    void RegisterMaterial(UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
-
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
 
 private:
+    friend class AVoxelWorld;
+
     TArray<uint8> m_voxelData;
 
     // Mesh Data
@@ -50,8 +49,8 @@ private:
     TArray<int32> m_indices;
     int32 m_indexCount = 0;
 
-    void GenerateVoxelData();
-    void GenerateVoxelMesh();
+    void GenerateVoxelData(uint32 voxelSize);
+    void GenerateVoxelMesh(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
 
     inline void AddPlane(const FVector& position,
                          const FVector& v0,
