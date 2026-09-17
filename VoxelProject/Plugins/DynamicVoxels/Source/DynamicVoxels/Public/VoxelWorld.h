@@ -21,9 +21,18 @@ public:
     uint32 VoxelSize = 100;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 ChunkLoadDistance = 5;
+    int32 HorizontalLoadDistance = 8;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 VerticalLoadDistance = 2;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool FixedLoadHeight = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 ChunkUpdateRate = 2;
+
+    UPROPERTY(VisibleAnywhere)
     UMaterial* BaseMaterial = nullptr;
 
     // Sets default values for this actor's properties
@@ -37,9 +46,16 @@ protected:
     virtual void Tick(float DeltaTime) override;
 
 private:
-    TArray<AVoxelChunk*> m_voxelChunks;
+    UPROPERTY()
+    TArray<AVoxelChunk*> m_voxelChunkInstances;
 
-    TArray<FIntVector3> m_chunkAddQueue;
+    TQueue<FIntVector3> m_chunkAddQueue;
+
+    FIntVector3 m_prevPawnChunkPosition = {};
+
+    void AddVoxelChunkInstance(const FIntVector3& chunkPosition);
+
+    inline FIntVector3 WorldToChunkPosition(const FVector& position) const;
 
     void LoadBaseMaterial();
 };

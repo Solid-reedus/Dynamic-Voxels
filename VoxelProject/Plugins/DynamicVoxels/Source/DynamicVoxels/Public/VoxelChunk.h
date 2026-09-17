@@ -17,13 +17,13 @@ public:
     static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
     static constexpr uint32 VOXEL_DATA_SIZE = VOXEL_CHUNK_SIZE + 2;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UPROPERTY(VisibleAnywhere)
     UProceduralMeshComponent* ProceduralMesh = nullptr;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UPROPERTY(VisibleAnywhere)
     UMaterialInstanceDynamic* MaterialInstance = nullptr;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UPROPERTY(VisibleAnywhere)
     UTexture2D* VoxelDataTexture = nullptr;
 
     // Sets default values for this actor's properties
@@ -31,6 +31,9 @@ public:
 
     uint8 GetVoxel(const FUintVector3& position) const;
     void SetVoxel(const FUintVector3& position, uint8 value);
+
+    // Get chunk position in chunk space
+    const FIntVector& GetChunkPosition() const { return m_chunkPosition; }
 
 protected:
     // Called when the game starts or when spawned
@@ -40,6 +43,8 @@ private:
     friend class AVoxelWorld;
 
     TArray<uint8> m_voxelData;
+
+    FIntVector m_chunkPosition;
 
     // Mesh Data
     TArray<FVector> m_vertices;

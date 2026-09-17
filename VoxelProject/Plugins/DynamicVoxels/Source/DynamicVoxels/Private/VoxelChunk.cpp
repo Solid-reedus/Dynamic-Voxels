@@ -10,6 +10,7 @@ AVoxelChunk::AVoxelChunk()
     PrimaryActorTick.bCanEverTick = false;
 
     ProceduralMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMesh"));
+    RootComponent = ProceduralMesh;
 }
 
 uint8 AVoxelChunk::GetVoxel(const FUintVector3& position) const
@@ -46,10 +47,12 @@ void AVoxelChunk::BeginPlay() { Super::BeginPlay(); }
 void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 {
     FVector actorPosition = GetActorLocation();
-    FIntVector3 relativePosition = FIntVector3(static_cast<uint32>(actorPosition.X),
-                                               static_cast<uint32>(actorPosition.Y),
-                                               static_cast<uint32>(actorPosition.Z)) /
+    FIntVector3 relativePosition = FIntVector3(static_cast<int32>(actorPosition.X),
+                                               static_cast<int32>(actorPosition.Y),
+                                               static_cast<int32>(actorPosition.Z)) /
                                    voxelSize;
+
+    m_chunkPosition = relativePosition / VOXEL_CHUNK_SIZE;
 
     // Initialize voxel data to 0
     m_voxelData.Init(0, VOXEL_DATA_SIZE * VOXEL_DATA_SIZE * VOXEL_DATA_SIZE);
