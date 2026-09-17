@@ -29,8 +29,8 @@ public:
     // Sets default values for this actor's properties
     AVoxelChunk();
 
-    uint8 GetVoxel(const FUint32Vector3& position) const;
-    void SetVoxel(const FUint32Vector3& position, uint8 value);
+    uint8 GetVoxel(const FUintVector3& position) const;
+    void SetVoxel(const FUintVector3& position, uint8 value);
 
 protected:
     // Called when the game starts or when spawned

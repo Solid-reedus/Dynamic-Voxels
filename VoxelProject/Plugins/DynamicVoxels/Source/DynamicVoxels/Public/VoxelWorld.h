@@ -6,17 +6,22 @@
 #include "GameFramework/Actor.h"
 #include "VoxelWorld.generated.h"
 
+class AVoxelChunk;
+
 UCLASS()
 class DYNAMICVOXELS_API AVoxelWorld : public AActor
 {
     GENERATED_BODY()
 
 public:
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UPROPERTY(EditAnywhere)
     UTexture2DArray* VoxelTextures = nullptr;
 
     UPROPERTY(EditAnywhere)
     uint32 VoxelSize = 100;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 ChunkLoadDistance = 5;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     UMaterial* BaseMaterial = nullptr;
@@ -32,5 +37,9 @@ protected:
     virtual void Tick(float DeltaTime) override;
 
 private:
+    TArray<AVoxelChunk*> m_voxelChunks;
+
+    TArray<FIntVector3> m_chunkAddQueue;
+
     void LoadBaseMaterial();
 };

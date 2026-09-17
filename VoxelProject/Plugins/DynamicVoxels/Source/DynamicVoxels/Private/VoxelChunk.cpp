@@ -12,7 +12,7 @@ AVoxelChunk::AVoxelChunk()
     ProceduralMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMesh"));
 }
 
-uint8 AVoxelChunk::GetVoxel(const FUint32Vector3& position) const
+uint8 AVoxelChunk::GetVoxel(const FUintVector3& position) const
 {
     // Should only run during editor, but im unsure
 #if UE_EDITOR
@@ -26,7 +26,7 @@ uint8 AVoxelChunk::GetVoxel(const FUint32Vector3& position) const
     return m_voxelData[position.Z * VOXEL_DATA_SIZE * VOXEL_DATA_SIZE + position.Y * VOXEL_DATA_SIZE + position.X];
 }
 
-void AVoxelChunk::SetVoxel(const FUint32Vector3& position, uint8 value)
+void AVoxelChunk::SetVoxel(const FUintVector3& position, uint8 value)
 {
     // Should only run during editor, but im unsure
 #if UE_EDITOR
@@ -46,10 +46,10 @@ void AVoxelChunk::BeginPlay() { Super::BeginPlay(); }
 void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 {
     FVector actorPosition = GetActorLocation();
-    FUint32Vector3 relativePosition = FUint32Vector3(static_cast<uint32>(actorPosition.X),
-                                                     static_cast<uint32>(actorPosition.Y),
-                                                     static_cast<uint32>(actorPosition.Z)) /
-                                      voxelSize;
+    FIntVector3 relativePosition = FIntVector3(static_cast<uint32>(actorPosition.X),
+                                               static_cast<uint32>(actorPosition.Y),
+                                               static_cast<uint32>(actorPosition.Z)) /
+                                   voxelSize;
 
     // Initialize voxel data to 0
     m_voxelData.Init(0, VOXEL_DATA_SIZE * VOXEL_DATA_SIZE * VOXEL_DATA_SIZE);
@@ -61,7 +61,7 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
         {
             for (uint32 x = 0; x < VOXEL_DATA_SIZE; x++)
             {
-                FUint32Vector3 worldPosition = relativePosition + FUint32Vector3(x, y, z);
+                FIntVector3 worldPosition = relativePosition + FIntVector3(x, y, z);
                 float perlinValue = FMath::PerlinNoise3D(FVector(worldPosition) / 32.0);
 
                 float falloff = (128.0f - static_cast<float>(worldPosition.Z)) / 64.0f - 1.0f;
@@ -69,15 +69,15 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 
                 if (perlinValue > 0.0f)
                 {
-                    SetVoxel(FUint32Vector3(x, y, z), 1);
+                    SetVoxel(FUintVector3(x, y, z), 1);
 
-                    FUint32Vector3 upPosition = worldPosition + FUint32Vector3(0, 0, 1);
+                    FIntVector3 upPosition = worldPosition + FIntVector3(0, 0, 1);
                     float perlinValueUp = FMath::PerlinNoise3D(FVector(upPosition) / 32.0);
 
                     falloff = (128.0f - static_cast<float>(upPosition.Z)) / 64.0f - 1.0f;
                     perlinValueUp += falloff;
 
-                    if (perlinValueUp <= 0.0f) SetVoxel(FUint32Vector3(x, y, z), 2);
+                    if (perlinValueUp <= 0.0f) SetVoxel(FUintVector3(x, y, z), 2);
                 }
             }
         }
@@ -93,46 +93,46 @@ void AVoxelChunk::GenerateVoxelMesh(uint32 voxelSize, UMaterial* baseMaterial, U
         {
             for (uint32 x = 1; x <= VOXEL_CHUNK_SIZE; x++)
             {
-                if (GetVoxel(FUint32Vector3(x, y, z)) > 0)
+                if (GetVoxel(FUintVector3(x, y, z)) > 0)
                 {
                     FVector voxelPos = FVector(x * voxelSize, y * voxelSize, z * voxelSize);
 
-                    if (GetVoxel(FUint32Vector3(x + 1, y, z)) == 0)
+                    if (GetVoxel(FUintVector3(x + 1, y, z)) == 0)
                         AddPlane(voxelPos,
                                  FVector(voxelSize, 0.0, 0.0),
                                  FVector(voxelSize, voxelSize, 0.0),
                                  FVector(voxelSize, 0.0, voxelSize),
                                  FVector(voxelSize, voxelSize, voxelSize),
                                  FVector(1.0, 0.0, 0.0));
-                    if (GetVoxel(FUint32Vector3(x - 1, y, z)) == 0)
+                    if (GetVoxel(FUintVector3(x - 1, y, z)) == 0)
                         AddPlane(voxelPos,
                                  FVector(0.0, voxelSize, 0.0),
                                  FVector(0.0, 0.0, 0.0),
                                  FVector(0.0, voxelSize, voxelSize),
                                  FVector(0.0, 0.0, voxelSize),
                                  FVector(-1.0, 0.0, 0.0));
-                    if (GetVoxel(FUint32Vector3(x, y + 1, z)) == 0)
+                    if (GetVoxel(FUintVector3(x, y + 1, z)) == 0)
                         AddPlane(voxelPos,
                                  FVector(voxelSize, voxelSize, 0.0),
                                  FVector(0.0, voxelSize, 0.0),
                                  FVector(voxelSize, voxelSize, voxelSize),
                                  FVector(0.0, voxelSize, voxelSize),
                                  FVector(0.0, 1.0, 0.0));
-                    if (GetVoxel(FUint32Vector3(x, y - 1, z)) == 0)
+                    if (GetVoxel(FUintVector3(x, y - 1, z)) == 0)
                         AddPlane(voxelPos,
                                  FVector(0.0, 0.0, 0.0),
                                  FVector(voxelSize, 0.0, 0.0),
                                  FVector(0.0, 0.0, voxelSize),
                                  FVector(voxelSize, 0.0, voxelSize),
                                  FVector(0.0, -1.0, 0.0));
-                    if (GetVoxel(FUint32Vector3(x, y, z + 1)) == 0)
+                    if (GetVoxel(FUintVector3(x, y, z + 1)) == 0)
                         AddPlane(voxelPos,
                                  FVector(0.0, 0.0, voxelSize),
                                  FVector(voxelSize, 0.0, voxelSize),
                                  FVector(0.0, voxelSize, voxelSize),
                                  FVector(voxelSize, voxelSize, voxelSize),
                                  FVector(0.0, 0.0, 1.0));
-                    if (GetVoxel(FUint32Vector3(x, y, z - 1)) == 0)
+                    if (GetVoxel(FUintVector3(x, y, z - 1)) == 0)
                         AddPlane(voxelPos,
                                  FVector(voxelSize, 0.0, 0.0),
                                  FVector(0.0, 0.0, 0.0),
@@ -147,14 +147,15 @@ void AVoxelChunk::GenerateVoxelMesh(uint32 voxelSize, UMaterial* baseMaterial, U
     if (ProceduralMesh)
     {
         ProceduralMesh->ClearAllMeshSections();
-        ProceduralMesh->CreateMeshSection_LinearColor(0,
-                                                      m_vertices,
-                                                      m_indices,
-                                                      m_normals,
-                                                      m_uvs,
-                                                      TArray<FLinearColor>(),
-                                                      TArray<FProcMeshTangent>(),
-                                                      true);
+        ProceduralMesh->CreateMeshSection_LinearColor(
+            0,
+            m_vertices,
+            m_indices,
+            m_normals,
+            m_uvs,
+            TArray<FLinearColor>(),
+            TArray<FProcMeshTangent>(),
+            true);  // TODO: Disable collision once more efficient collision algorithm is in place!
     }
     else
         UE_LOG(LogTemp, Error, TEXT("ProceduralMesh component missing!"));

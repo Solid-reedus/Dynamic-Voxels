@@ -21,11 +21,11 @@ void AVoxelWorld::BeginPlay()
     float chunkWorldSize = static_cast<float>(AVoxelChunk::VOXEL_CHUNK_SIZE * VoxelSize);
 
     // For now just spawn a 5x5x5 area of chunks
-    for (int x = 0; x < 10; x++)
+    for (int x = -ChunkLoadDistance; x <= ChunkLoadDistance; x++)
     {
-        for (int y = 0; y < 10; y++)
+        for (int y = -ChunkLoadDistance; y <= ChunkLoadDistance; y++)
         {
-            for (int z = 0; z < 4; z++)
+            for (int z = -ChunkLoadDistance; z <= ChunkLoadDistance; z++)
             {
                 FVector location(chunkWorldSize * x, chunkWorldSize * y, chunkWorldSize * z);
                 FRotator rotation(0.0f, 0.0f, 0.0f);
