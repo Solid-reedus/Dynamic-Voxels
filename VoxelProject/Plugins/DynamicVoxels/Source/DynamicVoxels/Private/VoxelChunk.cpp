@@ -67,43 +67,46 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
     // Initialize voxel data to 0
     m_voxelData.Init(0, VOXEL_DATA_SIZE * VOXEL_DATA_SIZE * VOXEL_DATA_SIZE);
 
-    bool containsAir = false;
     bool containsSolid = false;
 
     // Basic terrain generation, will be optimized and improved in the future
-    for (uint32 z = 0; z < VOXEL_DATA_SIZE; z++)
+    for (uint32 y = 0; y < VOXEL_DATA_SIZE; y++)
     {
-        for (uint32 y = 0; y < VOXEL_DATA_SIZE; y++)
+        for (uint32 x = 0; x < VOXEL_DATA_SIZE; x++)
         {
-            for (uint32 x = 0; x < VOXEL_DATA_SIZE; x++)
+            FIntVector2 topDownPosition = FIntVector2(x + relativePosition.X, y + relativePosition.Y);
+
+            double perlin2DVal = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 160.0) * 0.5 + 0.5;
+
+            int terrainValue = static_cast<int>(perlin2DVal * perlin2DVal * 80.0 + 48.0);
+            terrainValue -= relativePosition.Z;
+
+            for (int z = 0; z < terrainValue; z++)
             {
-                FIntVector3 worldPosition = relativePosition + FIntVector3(x, y, z);
-                float perlinValue = FMath::PerlinNoise3D(FVector(worldPosition) / 32.0);
+                if (z >= VOXEL_DATA_SIZE) break;
+
+                uint8 blockType = 1; // Stone
+                if (terrainValue - z < 3)
+                    blockType = 2;   // Grass
+                else if (terrainValue - z < 6)
+                    blockType = 3;   // Dirt
+
+                FIntVector3 worldPosition = FIntVector3(x, y, z) + relativePosition;
+                float perlinValue = FMath::PerlinNoise3D(FVector(worldPosition) / 16.0);
 
                 float falloff = (128.0f - static_cast<float>(worldPosition.Z)) / 64.0f - 1.0f;
                 perlinValue += falloff;
 
                 if (perlinValue > 0.0f)
                 {
+                    SetVoxel(FUintVector3(x, y, z), blockType);
                     containsSolid = true;
-
-                    SetVoxel(FUintVector3(x, y, z), 1);
-
-                    FIntVector3 upPosition = worldPosition + FIntVector3(0, 0, 1);
-                    float perlinValueUp = FMath::PerlinNoise3D(FVector(upPosition) / 32.0);
-
-                    falloff = (128.0f - static_cast<float>(upPosition.Z)) / 64.0f - 1.0f;
-                    perlinValueUp += falloff;
-
-                    if (perlinValueUp <= 0.0f) SetVoxel(FUintVector3(x, y, z), 2);
                 }
-                else
-                    containsAir = true;
             }
         }
     }
 
-    if (containsAir != containsSolid) m_isChunkUniform = true;
+    if (!containsSolid) m_isChunkUniform = true;
 }
 
 void AVoxelChunk::GenerateVoxelMesh(uint32 voxelSize)
