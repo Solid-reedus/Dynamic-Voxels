@@ -16,24 +16,28 @@ public:
     // TODO(David): Make these UPROPERTY instead
     static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
     static constexpr uint32 VOXEL_DATA_SIZE = VOXEL_CHUNK_SIZE + 2;
-    static constexpr uint32 VOXEL_SIZE = 100;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UPROPERTY(VisibleAnywhere)
     UProceduralMeshComponent* ProceduralMesh = nullptr;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UPROPERTY(VisibleAnywhere)
     UMaterialInstanceDynamic* MaterialInstance = nullptr;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UPROPERTY(VisibleAnywhere)
     UTexture2D* VoxelDataTexture = nullptr;
 
     // Sets default values for this actor's properties
     AVoxelChunk();
 
-    uint8 GetVoxel(const FUint32Vector3& position) const;
-    void SetVoxel(const FUint32Vector3& position, uint8 value);
+    void InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
 
-    void RegisterMaterial(UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
+    uint8 GetVoxel(const FUintVector3& position) const;
+    void SetVoxel(const FUintVector3& position, uint8 value);
+
+    // Get chunk position in chunk space
+    const FIntVector& GetChunkPosition() const { return m_chunkPosition; }
+    // Returns true if the chunk is fully solid or fully empty
+    bool IsChunkUniform() const { return m_isChunkUniform; }
 
 protected:
     // Called when the game starts or when spawned
@@ -41,6 +45,10 @@ protected:
 
 private:
     TArray<uint8> m_voxelData;
+
+    FIntVector m_chunkPosition;
+    bool m_isChunkUniform = false;
+    bool m_materialDataCreated = false;
 
     // Mesh Data
     TArray<FVector> m_vertices;
@@ -50,8 +58,9 @@ private:
     TArray<int32> m_indices;
     int32 m_indexCount = 0;
 
-    void GenerateVoxelData();
-    void GenerateVoxelMesh();
+    void GenerateVoxelData(uint32 voxelSize);
+    void GenerateVoxelMesh(uint32 voxelSize);
+    void CreateMaterialInstance(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
 
     inline void AddPlane(const FVector& position,
                          const FVector& v0,
