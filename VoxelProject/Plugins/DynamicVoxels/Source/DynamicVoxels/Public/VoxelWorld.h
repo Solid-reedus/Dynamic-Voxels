@@ -24,10 +24,7 @@ public:
     int32 HorizontalLoadDistance = 8;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 VerticalLoadDistance = 2;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    bool FixedLoadHeight = true;
+    int32 VerticalLoadDistance = 4;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     int32 ChunkUpdateRate = 2;
@@ -47,15 +44,17 @@ protected:
 
 private:
     UPROPERTY()
-    TArray<AVoxelChunk*> m_voxelChunkInstances;
-
+    TMap<FIntVector, AVoxelChunk*> m_voxelChunkInstances;
     TQueue<FIntVector3> m_chunkAddQueue;
 
-    FIntVector3 m_prevPawnChunkPosition = {};
+    FIntVector2 m_prevPawnChunkPosition;
 
-    void AddVoxelChunkInstance(const FIntVector3& chunkPosition);
-
-    inline FIntVector3 WorldToChunkPosition(const FVector& position) const;
+    void CreateNewChunk(const FIntVector3& chunkPosition);
 
     void LoadBaseMaterial();
+
+    // Converts world space position to chunk space position
+    FIntVector3 WorldToChunkPosition(const FVector& position) const;
+    // Gets the grid distance beween two points
+    static int GetGridDistance(const FIntVector2& p1, const FIntVector2& p2);
 };

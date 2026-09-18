@@ -8,7 +8,6 @@
 AVoxelWorld::AVoxelWorld()
 {
     // Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-    // Currently set to false, but will be needed later
     PrimaryActorTick.bCanEverTick = true;
 }
 
@@ -19,21 +18,21 @@ void AVoxelWorld::BeginPlay()
 
     LoadBaseMaterial();
 
-    // Create the initial terrain
     APawn* playerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-    FIntVector3 curPawnChunkPosition = WorldToChunkPosition(playerPawn->GetActorLocation());
+    FIntVector2 curPawnChunkPosition = FIntVector2(WorldToChunkPosition(playerPawn->GetActorLocation()));
     m_prevPawnChunkPosition = curPawnChunkPosition;
 
-    for (int z = -VerticalLoadDistance; z <= VerticalLoadDistance; z++)
+    // Create the initial terrain
+    for (int z = 0; z < VerticalLoadDistance; z++)
     {
         for (int y = -HorizontalLoadDistance; y <= HorizontalLoadDistance; y++)
         {
             for (int x = -HorizontalLoadDistance; x <= HorizontalLoadDistance; x++)
             {
-                FIntVector3 addPosition = FIntVector3(x, y, z) + curPawnChunkPosition;
+                FIntVector3 addPosition = FIntVector3(x + curPawnChunkPosition.X, y + curPawnChunkPosition.Y, z);
 
                 if (FMath::Abs(x) < 2 && FMath::Abs(y) < 2)
-                    AddVoxelChunkInstance(addPosition);
+                    CreateNewChunk(addPosition);
                 else
                     m_chunkAddQueue.Enqueue(addPosition);
             }
@@ -47,40 +46,21 @@ void AVoxelWorld::Tick(float DeltaTime)
     Super::Tick(DeltaTime);
 
     APawn* playerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-    FIntVector3 curPawnChunkPosition = WorldToChunkPosition(playerPawn->GetActorLocation());
+    FIntVector2 curPawnChunkPosition = FIntVector2(WorldToChunkPosition(playerPawn->GetActorLocation()));
 
+    // Spawn new chunks that are in the chunk queue
     int chunksSpawned = 0;
     while (chunksSpawned < ChunkUpdateRate)
     {
         FIntVector3 chunkPosition;
         if (m_chunkAddQueue.Dequeue(chunkPosition))
         {
-            bool dontSpawn = false;
+            int chunkDistance = GetGridDistance(FIntVector2(chunkPosition), curPawnChunkPosition);
 
-            for (AVoxelChunk* voxelChunk : m_voxelChunkInstances)
+            if (chunkDistance <= HorizontalLoadDistance && !m_voxelChunkInstances.Contains(chunkPosition))
             {
-                if (voxelChunk)
-                {
-                    if (voxelChunk->GetChunkPosition() == chunkPosition)
-                    {
-                        dontSpawn = true;
-                        break;
-                    }
-                }
-            }
-
-            int d1 = FMath::Abs(chunkPosition.X - curPawnChunkPosition.X);
-            int d2 = FMath::Abs(chunkPosition.Y - curPawnChunkPosition.Y);
-            int vert = FMath::Abs(chunkPosition.Z - curPawnChunkPosition.Z);
-
-            int maxHori = FMath::Max(d1, d2);
-
-            if (maxHori > HorizontalLoadDistance || vert > VerticalLoadDistance) dontSpawn = true;
-
-            if (!dontSpawn)
-            {
+                CreateNewChunk(chunkPosition);
                 chunksSpawned++;
-                AddVoxelChunkInstance(chunkPosition);
             }
         }
         else
@@ -89,40 +69,35 @@ void AVoxelWorld::Tick(float DeltaTime)
 
     if (curPawnChunkPosition != m_prevPawnChunkPosition)
     {
-        for (int i = 0; i < m_voxelChunkInstances.Num(); i++)
+        // Remove chunks that are too far away from the player
+        for (auto it = m_voxelChunkInstances.CreateIterator(); it; ++it)
         {
-            if (m_voxelChunkInstances[i])
+            if (it.Value())
             {
-                FIntVector3 chunkPos = m_voxelChunkInstances[i]->GetChunkPosition();
+                FIntVector3 chunkPos = it.Value()->GetChunkPosition();
 
-                int d1 = FMath::Abs(chunkPos.X - curPawnChunkPosition.X);
-                int d2 = FMath::Abs(chunkPos.Y - curPawnChunkPosition.Y);
-                int vert = FMath::Abs(chunkPos.Z - curPawnChunkPosition.Z);
+                int chunkDistance = GetGridDistance(FIntVector2(chunkPos), FIntVector2(curPawnChunkPosition));
 
-                int maxHori = FMath::Max(d1, d2);
-
-                if (maxHori > HorizontalLoadDistance || vert > VerticalLoadDistance)
+                if (chunkDistance > HorizontalLoadDistance)
                 {
-                    m_voxelChunkInstances[i]->Destroy();
-                    m_voxelChunkInstances[i] = nullptr;
+                    it.Value()->Destroy();
+                    it.Value() = nullptr;
+                    it.RemoveCurrent();
                 }
             }
         }
-        for (int z = -VerticalLoadDistance; z <= VerticalLoadDistance; z++)
+        // Spawn chunks that were previously too far away from the player
+        for (int z = 0; z < VerticalLoadDistance; z++)
         {
             for (int y = -HorizontalLoadDistance; y <= HorizontalLoadDistance; y++)
             {
                 for (int x = -HorizontalLoadDistance; x <= HorizontalLoadDistance; x++)
                 {
-                    FIntVector3 addPosition = FIntVector3(x, y, z) + curPawnChunkPosition;
+                    FIntVector3 addPosition = FIntVector3(x + curPawnChunkPosition.X, y + curPawnChunkPosition.Y, z);
 
-                    int d1 = FMath::Abs(addPosition.X - m_prevPawnChunkPosition.X);
-                    int d2 = FMath::Abs(addPosition.Y - m_prevPawnChunkPosition.Y);
-                    int vert = FMath::Abs(addPosition.Z - m_prevPawnChunkPosition.Z);
-
-                    int maxHori = FMath::Max(d1, d2);
-
-                    if (maxHori > HorizontalLoadDistance || vert > VerticalLoadDistance) m_chunkAddQueue.Enqueue(addPosition);
+                    // Ensure that whe are only queuing up chunks to be added that where outside of the render distance
+                    int chunkDistance = GetGridDistance(FIntVector2(addPosition), FIntVector2(m_prevPawnChunkPosition));
+                    if (chunkDistance > HorizontalLoadDistance) m_chunkAddQueue.Enqueue(addPosition);
                 }
             }
         }
@@ -130,7 +105,7 @@ void AVoxelWorld::Tick(float DeltaTime)
     m_prevPawnChunkPosition = curPawnChunkPosition;
 }
 
-void AVoxelWorld::AddVoxelChunkInstance(const FIntVector3& chunkPosition)
+void AVoxelWorld::CreateNewChunk(const FIntVector3& chunkPosition)
 {
     float chunkWorldSize = static_cast<float>(AVoxelChunk::VOXEL_CHUNK_SIZE * VoxelSize);
 
@@ -139,28 +114,9 @@ void AVoxelWorld::AddVoxelChunkInstance(const FIntVector3& chunkPosition)
     FActorSpawnParameters spawnInfo = {};
 
     AVoxelChunk* voxelChunk = GetWorld()->SpawnActor<AVoxelChunk>(location, rotation, spawnInfo);
-    voxelChunk->GenerateVoxelData(VoxelSize);
-    voxelChunk->GenerateVoxelMesh(VoxelSize, BaseMaterial, VoxelTextures);
+    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures);
 
-    int32 nullptrIndex = m_voxelChunkInstances.Find(nullptr);
-    if (nullptrIndex != INDEX_NONE)
-        m_voxelChunkInstances[nullptrIndex] = voxelChunk;
-    else
-        m_voxelChunkInstances.Add(voxelChunk);
-}
-
-inline FIntVector3 AVoxelWorld::WorldToChunkPosition(const FVector& position) const
-{
-    FVector relativePosition = position / FVector(VoxelSize);
-    relativePosition /= FVector(AVoxelChunk::VOXEL_CHUNK_SIZE);
-    FIntVector3 final = FIntVector3(static_cast<int>(FMath::Floor(relativePosition.X)),
-                                    static_cast<int>(FMath::Floor(relativePosition.Y)),
-                                    static_cast<int>(FMath::Floor(relativePosition.Z)));
-
-    if (FixedLoadHeight)
-        final.Z = VerticalLoadDistance;
-
-    return final;
+    m_voxelChunkInstances.Add(chunkPosition, voxelChunk);
 }
 
 void AVoxelWorld::LoadBaseMaterial()
@@ -169,4 +125,23 @@ void AVoxelWorld::LoadBaseMaterial()
     BaseMaterial = Cast<UMaterial>(StaticLoadObject(UMaterial::StaticClass(), nullptr, *materialPath));
 
     if (!BaseMaterial) UE_LOG(LogTemp, Error, TEXT("Failed to load base material for voxel terrain!"));
+}
+
+FIntVector3 AVoxelWorld::WorldToChunkPosition(const FVector& position) const
+{
+    FVector relativePosition = position / FVector(VoxelSize);
+    relativePosition /= FVector(AVoxelChunk::VOXEL_CHUNK_SIZE);
+    FIntVector3 final = FIntVector3(static_cast<int>(FMath::Floor(relativePosition.X)),
+                                    static_cast<int>(FMath::Floor(relativePosition.Y)),
+                                    static_cast<int>(FMath::Floor(relativePosition.Z)));
+
+    return final;
+}
+
+int AVoxelWorld::GetGridDistance(const FIntVector2& p1, const FIntVector2& p2)
+{
+    int d1 = FMath::Abs(p1.X - p2.X);
+    int d2 = FMath::Abs(p1.Y - p2.Y);
+
+    return FMath::Max(d1, d2);
 }

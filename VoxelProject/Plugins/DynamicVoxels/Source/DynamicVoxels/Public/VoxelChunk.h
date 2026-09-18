@@ -29,22 +29,26 @@ public:
     // Sets default values for this actor's properties
     AVoxelChunk();
 
+    void InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
+
     uint8 GetVoxel(const FUintVector3& position) const;
     void SetVoxel(const FUintVector3& position, uint8 value);
 
     // Get chunk position in chunk space
     const FIntVector& GetChunkPosition() const { return m_chunkPosition; }
+    // Returns true if the chunk is fully solid or fully empty
+    bool IsChunkUniform() const { return m_isChunkUniform; }
 
 protected:
     // Called when the game starts or when spawned
     virtual void BeginPlay() override;
 
 private:
-    friend class AVoxelWorld;
-
     TArray<uint8> m_voxelData;
 
     FIntVector m_chunkPosition;
+    bool m_isChunkUniform = false;
+    bool m_materialDataCreated = false;
 
     // Mesh Data
     TArray<FVector> m_vertices;
@@ -55,7 +59,8 @@ private:
     int32 m_indexCount = 0;
 
     void GenerateVoxelData(uint32 voxelSize);
-    void GenerateVoxelMesh(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
+    void GenerateVoxelMesh(uint32 voxelSize);
+    void CreateMaterialInstance(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
 
     inline void AddPlane(const FVector& position,
                          const FVector& v0,

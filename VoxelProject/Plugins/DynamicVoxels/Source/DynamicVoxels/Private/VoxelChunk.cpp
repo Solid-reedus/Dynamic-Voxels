@@ -13,6 +13,16 @@ AVoxelChunk::AVoxelChunk()
     RootComponent = ProceduralMesh;
 }
 
+void AVoxelChunk::InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
+{
+    GenerateVoxelData(voxelSize);
+    if (!IsChunkUniform())
+    {
+        GenerateVoxelMesh(voxelSize);
+        CreateMaterialInstance(voxelSize, baseMaterial, voxelTextures);
+    }
+}
+
 uint8 AVoxelChunk::GetVoxel(const FUintVector3& position) const
 {
     // Should only run during editor, but im unsure
@@ -57,6 +67,9 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
     // Initialize voxel data to 0
     m_voxelData.Init(0, VOXEL_DATA_SIZE * VOXEL_DATA_SIZE * VOXEL_DATA_SIZE);
 
+    bool containsAir = false;
+    bool containsSolid = false;
+
     // Basic terrain generation, will be optimized and improved in the future
     for (uint32 z = 0; z < VOXEL_DATA_SIZE; z++)
     {
@@ -72,6 +85,8 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 
                 if (perlinValue > 0.0f)
                 {
+                    containsSolid = true;
+
                     SetVoxel(FUintVector3(x, y, z), 1);
 
                     FIntVector3 upPosition = worldPosition + FIntVector3(0, 0, 1);
@@ -82,12 +97,16 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 
                     if (perlinValueUp <= 0.0f) SetVoxel(FUintVector3(x, y, z), 2);
                 }
+                else
+                    containsAir = true;
             }
         }
     }
+
+    if (containsAir != containsSolid) m_isChunkUniform = true;
 }
 
-void AVoxelChunk::GenerateVoxelMesh(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
+void AVoxelChunk::GenerateVoxelMesh(uint32 voxelSize)
 {
     // Generate faces & polygons for voxels
     for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; z++)
@@ -168,9 +187,12 @@ void AVoxelChunk::GenerateVoxelMesh(uint32 voxelSize, UMaterial* baseMaterial, U
     m_uvs.Empty();
     m_indices.Empty();
     m_indexCount = 0;
+}
 
-    // Create and assign material to voxel mesh
-    if (baseMaterial && voxelTextures)
+void AVoxelChunk::CreateMaterialInstance(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
+{
+    // Create material and texture if they don't exist yet
+    if (baseMaterial && voxelTextures && m_materialDataCreated == false)
     {
         // Create texture to store voxel data
         uint32 textureHeight = m_voxelData.Num() / VOXEL_DATA_SIZE;
@@ -198,9 +220,10 @@ void AVoxelChunk::GenerateVoxelMesh(uint32 voxelSize, UMaterial* baseMaterial, U
         MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(VOXEL_DATA_SIZE));
 
         ProceduralMesh->SetMaterial(0, MaterialInstance);
+
+        m_materialDataCreated = true;
     }
-    else
-        UE_LOG(LogTemp, Warning, TEXT("Missing voxel texture 2D array, cannot assign material!"));
+    else UE_LOG(LogTemp, Warning, TEXT("Missing material data for chunk, cannot assign material!"));
 }
 
 inline void AVoxelChunk::AddPlane(const FVector& position,
