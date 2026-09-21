@@ -7,6 +7,7 @@
 #include "VoxelWorld.generated.h"
 
 class AVoxelChunk;
+class AVoxelConstruct;
 
 UCLASS()
 class DYNAMICVOXELS_API AVoxelWorld : public AActor
@@ -43,11 +44,16 @@ protected:
     virtual void Tick(float DeltaTime) override;
 
 private:
-    UPROPERTY()
-    TMap<FIntVector, AVoxelChunk*> m_voxelChunkInstances;
+
+    //UPROPERTY()
     TQueue<FIntVector3> m_chunkAddQueue;
 
     FIntVector2 m_prevPawnChunkPosition;
+
+    UPROPERTY()
+    TMap<FIntVector, AVoxelChunk*> m_voxelChunkInstances;
+    UPROPERTY()
+    TArray<AVoxelConstruct*> m_constructInstances; // new stuff
 
     void CreateNewChunk(const FIntVector3& chunkPosition);
 
