@@ -12,6 +12,22 @@ AVoxelBase::AVoxelBase()
 
     ProceduralMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMesh"));
     RootComponent = ProceduralMesh;
+
+    // Without this, bUseComplexAsSimpleCollision defaults to true, meaning
+    // Unreal treats the render mesh's own (nonexistent, since
+    // RegenerateMesh creates its section with bCreateCollision=false)
+    // complex collision as simple collision - i.e. no collision at all,
+    // and "trying to simulate physics but it has ComplexAsSimple collision"
+    // if anything calls SetSimulatePhysics(true). This has to be false so
+    // CreateCollision()'s compound boxes actually get used as simple
+    // collision - both for physics simulation (AVoxelConstruct) and so
+    // static collision queries (AVoxelChunk) use the cheap boxes instead of
+    // silently falling back to expensive per-triangle complex collision.
+    ProceduralMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    ProceduralMesh->SetCollisionObjectType(ECollisionChannel::ECC_PhysicsBody);
+    ProceduralMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
+    ProceduralMesh->bUseComplexAsSimpleCollision = false;
+    ProceduralMesh->SetSimulatePhysics(false);
 }
 
 void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
@@ -105,6 +121,9 @@ void AVoxelBase::RegenerateMesh()
     {
         UE_LOG(LogTemp, Error, TEXT("%s: ProceduralMesh component missing!"), *GetName());
     }
+
+    // for now in here
+    CreateCollision();
 }
 
 void AVoxelBase::AddPlane(const FVector& Position,

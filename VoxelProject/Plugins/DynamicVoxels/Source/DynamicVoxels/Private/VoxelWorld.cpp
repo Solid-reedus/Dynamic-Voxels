@@ -4,6 +4,8 @@
 #include "VoxelChunk.h"
 #include "Kismet/GameplayStatics.h"
 
+#include "VoxelConstruct.h"
+
 // Sets default values
 AVoxelWorld::AVoxelWorld()
 {
@@ -38,6 +40,19 @@ void AVoxelWorld::BeginPlay()
             }
         }
     }
+
+
+
+    // Hardcoded test spawn - remove once real placement logic exists
+    const FVector TestConstructLocation(100.0f, 100.0f, 9000.0f);
+    AVoxelConstruct* TestConstruct = GetWorld()->SpawnActor<AVoxelConstruct>(TestConstructLocation, FRotator::ZeroRotator);
+    if (TestConstruct)
+    {
+        TestConstruct->InitVoxel(EVoxelCollisionType::ThreeGDM, /*bIsWorld=*/false);
+    }
+
+
+
 }
 
 // Called every frame
