@@ -1,4 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "VoxelBase.h"
 #include "VoxelCollisionDecomposition.h"
@@ -13,16 +12,6 @@ AVoxelBase::AVoxelBase()
     ProceduralMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMesh"));
     RootComponent = ProceduralMesh;
 
-    // Without this, bUseComplexAsSimpleCollision defaults to true, meaning
-    // Unreal treats the render mesh's own (nonexistent, since
-    // RegenerateMesh creates its section with bCreateCollision=false)
-    // complex collision as simple collision - i.e. no collision at all,
-    // and "trying to simulate physics but it has ComplexAsSimple collision"
-    // if anything calls SetSimulatePhysics(true). This has to be false so
-    // CreateCollision()'s compound boxes actually get used as simple
-    // collision - both for physics simulation (AVoxelConstruct) and so
-    // static collision queries (AVoxelChunk) use the cheap boxes instead of
-    // silently falling back to expensive per-triangle complex collision.
     ProceduralMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     ProceduralMesh->SetCollisionObjectType(ECollisionChannel::ECC_PhysicsBody);
     ProceduralMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
@@ -113,17 +102,12 @@ void AVoxelBase::RegenerateMesh()
                                                       m_uvs,
                                                       TArray<FLinearColor>(),
                                                       TArray<FProcMeshTangent>(),
-                                                      false);  // no longer relying on built-in complex collision from the
-                                                               // render mesh - CreateCollision() below builds proper
-                                                               // compound collision instead
+                                                      false);  
     }
     else
     {
         UE_LOG(LogTemp, Error, TEXT("%s: ProceduralMesh component missing!"), *GetName());
     }
-
-    // for now in here
-    CreateCollision();
 }
 
 void AVoxelBase::AddPlane(const FVector& Position,
@@ -193,9 +177,6 @@ void AVoxelBase::CreateCollision()
 
     if (CollisionType == EVoxelCollisionType::ConvexHull)
     {
-        // Not one of the paper's methods - the simplest and least accurate
-        // option (fills in every concavity). Hand the engine every
-        // surface-voxel corner and let its own hull cooking reduce it.
         TArray<FVector> HullPoints;
         for (uint32 z = 0; z < N; ++z)
         {
@@ -231,9 +212,6 @@ void AVoxelBase::CreateCollision()
     }
     else
     {
-        // Grid passes straight through - DecompVoxel's functions take
-        // exactly this type, no adapter or copy needed now that it's the
-        // project's real voxel storage rather than a throwaway conversion.
         TArray<DecompVoxel::FVoxelBlock> Blocks;
         switch (CollisionType)
         {
@@ -258,9 +236,6 @@ void AVoxelBase::CreateCollision()
         BodySetup->AggGeom.BoxElems.Reserve(Blocks.Num());
         for (const DecompVoxel::FVoxelBlock& Block : Blocks)
         {
-            // No centering offset - matches the render mesh's own convention
-            // (voxel x sits directly at world x*VoxelSize, no "-CenterOffset"
-            // recentering), so collision lines up with the visible mesh.
             const FVector BlockMin = FVector(Block.X, Block.Y, Block.Z) * VoxelSize;
             const FVector BlockSize = FVector(Block.SizeX, Block.SizeY, Block.SizeZ) * VoxelSize;
             const FVector BlockCenter = BlockMin + BlockSize * 0.5f;

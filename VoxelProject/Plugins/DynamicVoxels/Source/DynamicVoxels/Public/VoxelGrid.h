@@ -3,13 +3,10 @@
 #include "CoreMinimal.h"
 #include "VoxelGrid.generated.h"
 
-// The project's actual voxel storage type: a flat, indexed array of
-// block-type values (0 = empty/air, nonzero = solid material), plus the
-// index math and bounds-checking needed to read/write it safely. AVoxelBase
-// holds one of these directly (not a raw TArray<uint8>) so this logic lives
-// in exactly one place instead of being duplicated between the actor and
-// whatever needs to read the data (DecompVoxel's decomposition functions
-// take this exact type by const-reference, no copying or adapting needed).
+/*
+    a flat array of voxel data, with a grid size and a data array of uint8 values,
+    meant to encapsulate the voxel data and provide some basic functionality to access and modify the data
+*/
 USTRUCT()
 struct DYNAMICVOXELS_API FVoxelGrid
 {
@@ -21,8 +18,6 @@ struct DYNAMICVOXELS_API FVoxelGrid
     UPROPERTY()
     TArray<uint8> Data;
 
-    // Resizes to GridSize^3 and zeroes every voxel. Call before any
-    // SetVoxel calls when (re)initializing from scratch.
     void Initialize(uint32 InGridSize)
     {
         GridSize = InGridSize;
@@ -54,9 +49,6 @@ struct DYNAMICVOXELS_API FVoxelGrid
         Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X] = Value;
     }
 
-    // Consumed by DecompVoxel's decomposition functions. Collision only
-    // cares about solid-vs-empty, not which material a voxel is, so any
-    // nonzero block-type value counts as filled.
     bool IsFilled(int32 x, int32 y, int32 z) const
     {
         if (x < 0 || y < 0 || z < 0) return false;

@@ -4,34 +4,16 @@
 #include "Engine/Texture2DArray.h"
 
 // Sets default values
-AVoxelChunk::AVoxelChunk()
-{
-    // Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-    PrimaryActorTick.bCanEverTick = false;
-
-    // ProceduralMesh is already created and set as RootComponent by
-    // AVoxelBase's constructor, which always runs before this one - nothing
-    // to do here anymore.
-}
+AVoxelChunk::AVoxelChunk() { PrimaryActorTick.bCanEverTick = false; }
 
 void AVoxelChunk::InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
 {
-    // RegenerateMesh()/CreateCollision() read VoxelSize from the inherited
-    // property rather than taking it as a parameter, so this has to be set
-    // before either of them runs.
     VoxelSize = voxelSize;
 
     GenerateVoxelData(voxelSize);
     if (!IsChunkUniform())
     {
-        // Border = 1: the outermost voxel shell is a copy of the ADJACENT
-        // chunk's edge data, kept only so face-culling reads correctly at
-        // the seam - it's not this chunk's own geometry and shouldn't be
-        // rendered (see the comment on RegenerateMesh in VoxelBase.h).
-        
-        //RegenerateMesh(1);
         RegenerateMesh();
-        
         CreateCollision();
         CreateMaterialInstance(voxelSize, baseMaterial, voxelTextures);
     }
@@ -45,8 +27,7 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
     FVector actorPosition = GetActorLocation();
     FIntVector3 relativePosition = FIntVector3(static_cast<int32>(actorPosition.X),
                                                static_cast<int32>(actorPosition.Y),
-                                               static_cast<int32>(actorPosition.Z)) /
-                                   voxelSize;
+                                               static_cast<int32>(actorPosition.Z)) / voxelSize;
 
     m_chunkPosition = relativePosition / VOXEL_CHUNK_SIZE;
 
@@ -129,5 +110,7 @@ void AVoxelChunk::CreateMaterialInstance(uint32 voxelSize, UMaterial* baseMateri
         m_materialDataCreated = true;
     }
     else
+    {
         UE_LOG(LogTemp, Warning, TEXT("Missing material data for chunk, cannot assign material!"));
+    }
 }

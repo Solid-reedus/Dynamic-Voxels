@@ -45,15 +45,10 @@ protected:
 
 private:
 
-    //UPROPERTY()
     TQueue<FIntVector3> m_chunkAddQueue;
-
     FIntVector2 m_prevPawnChunkPosition;
-
-    UPROPERTY()
     TMap<FIntVector, AVoxelChunk*> m_voxelChunkInstances;
-    UPROPERTY()
-    TArray<AVoxelConstruct*> m_constructInstances; // new stuff
+    TArray<AVoxelConstruct*> m_constructInstances;
 
     void CreateNewChunk(const FIntVector3& chunkPosition);
 
@@ -61,6 +56,7 @@ private:
 
     // Converts world space position to chunk space position
     FIntVector3 WorldToChunkPosition(const FVector& position) const;
+
     // Gets the grid distance beween two points
     static int GetGridDistance(const FIntVector2& p1, const FIntVector2& p2);
 };

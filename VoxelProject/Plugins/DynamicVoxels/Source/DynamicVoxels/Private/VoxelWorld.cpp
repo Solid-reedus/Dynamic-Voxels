@@ -6,7 +6,6 @@
 
 #include "VoxelConstruct.h"
 
-// Sets default values
 AVoxelWorld::AVoxelWorld()
 {
     // Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -34,24 +33,26 @@ void AVoxelWorld::BeginPlay()
                 FIntVector3 addPosition = FIntVector3(x + curPawnChunkPosition.X, y + curPawnChunkPosition.Y, z);
 
                 if (FMath::Abs(x) < 2 && FMath::Abs(y) < 2)
+                {
                     CreateNewChunk(addPosition);
+                }
                 else
+                {
                     m_chunkAddQueue.Enqueue(addPosition);
+                }
             }
         }
     }
 
 
-
-    // Hardcoded test spawn - remove once real placement logic exists
-    const FVector TestConstructLocation(100.0f, 100.0f, 9000.0f);
+    // Hardcoded test spawn, remove once real placement logic exists
+    const FVector TestConstructLocation(100.0f, 100.0f, 12000.0f);
     AVoxelConstruct* TestConstruct = GetWorld()->SpawnActor<AVoxelConstruct>(TestConstructLocation, FRotator::ZeroRotator);
     if (TestConstruct)
     {
-        TestConstruct->InitVoxel(EVoxelCollisionType::ThreeGDM, /*bIsWorld=*/false);
+        TestConstruct->InitVoxel(EVoxelCollisionType::ThreeGDM, false);
     }
-
-
+    m_constructInstances.Add(TestConstruct);
 
 }
 
@@ -79,7 +80,9 @@ void AVoxelWorld::Tick(float DeltaTime)
             }
         }
         else
+        {
             break;
+        }
     }
 
     if (curPawnChunkPosition != m_prevPawnChunkPosition)
