@@ -1,7 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "VoxelChunk.h"
-#include "Engine/Texture2DArray.h"
 
 // Sets default values
 AVoxelChunk::AVoxelChunk() { PrimaryActorTick.bCanEverTick = false; }
@@ -15,7 +14,7 @@ void AVoxelChunk::InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTe
     {
         RegenerateMesh();
         CreateCollision();
-        CreateMaterialInstance(voxelSize, baseMaterial, voxelTextures);
+        CreateMaterialInstance(baseMaterial, voxelTextures);
     }
 }
 
@@ -31,14 +30,14 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 
     m_chunkPosition = relativePosition / VOXEL_CHUNK_SIZE;
 
-    InitializeGrid(VOXEL_DATA_SIZE);
+    Grid.Initialize(VOXEL_GRID_SIZE);
 
     bool containsSolid = false;
 
     // Basic terrain generation, will be optimized and improved in the future
-    for (uint32 y = 0; y < VOXEL_DATA_SIZE; y++)
+    for (uint32 y = 0; y < VOXEL_GRID_SIZE; y++)
     {
-        for (uint32 x = 0; x < VOXEL_DATA_SIZE; x++)
+        for (uint32 x = 0; x < VOXEL_GRID_SIZE; x++)
         {
             FIntVector2 topDownPosition = FIntVector2(x + relativePosition.X, y + relativePosition.Y);
 
@@ -49,7 +48,7 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 
             for (int z = 0; z < terrainValue; z++)
             {
-                if (z >= (int)VOXEL_DATA_SIZE) break;
+                if (z >= static_cast<int>(VOXEL_GRID_SIZE)) break;
 
                 uint8 blockType = 1;  // Stone
                 if (terrainValue - z < 3)
@@ -73,44 +72,4 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
     }
 
     if (!containsSolid) m_isChunkUniform = true;
-}
-
-void AVoxelChunk::CreateMaterialInstance(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
-{
-    // Create material and texture if they don't exist yet
-    if (baseMaterial && voxelTextures && m_materialDataCreated == false)
-    {
-        // Create texture to store voxel data
-        uint32 textureHeight = Grid.Data.Num() / VOXEL_DATA_SIZE;
-
-        VoxelDataTexture = UTexture2D::CreateTransient(VOXEL_DATA_SIZE, textureHeight, PF_R8);
-        VoxelDataTexture->CompressionSettings = TextureCompressionSettings::TC_Grayscale;
-        VoxelDataTexture->SRGB = 0;
-        VoxelDataTexture->Filter = TextureFilter::TF_Nearest;
-        VoxelDataTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
-        VoxelDataTexture->CompressionNone = 1;
-
-        // Upload voxel data to texture
-        void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-        FMemory::Memcpy(TargetTextureData, Grid.Data.GetData(), Grid.Data.Num());
-
-        VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
-        VoxelDataTexture->UpdateResource();
-
-        // Create material instance for chunk mesh
-        MaterialInstance = UMaterialInstanceDynamic::Create(baseMaterial, this);
-        MaterialInstance->SetTextureParameterValue(TEXT("VoxelTextures"), voxelTextures);
-        MaterialInstance->SetTextureParameterValue(TEXT("VoxelDataTexture"), VoxelDataTexture);
-
-        MaterialInstance->SetScalarParameterValue(TEXT("VoxelSize"), static_cast<float>(voxelSize));
-        MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(VOXEL_DATA_SIZE));
-
-        ProceduralMesh->SetMaterial(0, MaterialInstance);
-
-        m_materialDataCreated = true;
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Missing material data for chunk, cannot assign material!"));
-    }
 }
