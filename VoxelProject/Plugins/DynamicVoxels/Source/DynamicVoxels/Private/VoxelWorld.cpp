@@ -4,7 +4,8 @@
 #include "VoxelChunk.h"
 #include "Kismet/GameplayStatics.h"
 
-// Sets default values
+#include "VoxelConstruct.h"
+
 AVoxelWorld::AVoxelWorld()
 {
     // Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
@@ -19,7 +20,12 @@ void AVoxelWorld::BeginPlay()
     LoadBaseMaterial();
 
     APawn* playerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-    FIntVector2 curPawnChunkPosition = FIntVector2(WorldToChunkPosition(playerPawn->GetActorLocation()));
+    FIntVector2 curPawnChunkPosition;
+    if (playerPawn)
+        curPawnChunkPosition = FIntVector2(WorldToChunkPosition(playerPawn->GetActorLocation()));
+    else
+        curPawnChunkPosition = m_prevPawnChunkPosition;
+
     m_prevPawnChunkPosition = curPawnChunkPosition;
 
     // Create the initial terrain
@@ -32,12 +38,27 @@ void AVoxelWorld::BeginPlay()
                 FIntVector3 addPosition = FIntVector3(x + curPawnChunkPosition.X, y + curPawnChunkPosition.Y, z);
 
                 if (FMath::Abs(x) < 2 && FMath::Abs(y) < 2)
+                {
                     CreateNewChunk(addPosition);
+                }
                 else
+                {
                     m_chunkAddQueue.Enqueue(addPosition);
+                }
             }
         }
     }
+
+
+    // Hardcoded test spawn, remove once real placement logic exists
+    const FVector TestConstructLocation(100.0f, 100.0f, 12000.0f);
+    AVoxelConstruct* TestConstruct = GetWorld()->SpawnActor<AVoxelConstruct>(TestConstructLocation, FRotator::ZeroRotator);
+    if (TestConstruct)
+    {
+        TestConstruct->InitVoxel(EVoxelCollisionType::ThreeGDM, false);
+    }
+    m_constructInstances.Add(TestConstruct);
+
 }
 
 // Called every frame
@@ -46,7 +67,11 @@ void AVoxelWorld::Tick(float DeltaTime)
     Super::Tick(DeltaTime);
 
     APawn* playerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-    FIntVector2 curPawnChunkPosition = FIntVector2(WorldToChunkPosition(playerPawn->GetActorLocation()));
+    FIntVector2 curPawnChunkPosition;
+    if (playerPawn)
+        curPawnChunkPosition = FIntVector2(WorldToChunkPosition(playerPawn->GetActorLocation()));
+    else
+        curPawnChunkPosition = m_prevPawnChunkPosition;
 
     // Spawn new chunks that are in the chunk queue
     int chunksSpawned = 0;
@@ -64,7 +89,9 @@ void AVoxelWorld::Tick(float DeltaTime)
             }
         }
         else
+        {
             break;
+        }
     }
 
     if (curPawnChunkPosition != m_prevPawnChunkPosition)
@@ -107,7 +134,7 @@ void AVoxelWorld::Tick(float DeltaTime)
 
 void AVoxelWorld::CreateNewChunk(const FIntVector3& chunkPosition)
 {
-    float chunkWorldSize = static_cast<float>(AVoxelChunk::VOXEL_CHUNK_SIZE * VoxelSize);
+    float chunkWorldSize = static_cast<float>(AVoxelBase::VOXEL_CHUNK_SIZE * VoxelSize);
 
     FVector location(chunkWorldSize * chunkPosition.X, chunkWorldSize * chunkPosition.Y, chunkWorldSize * chunkPosition.Z);
     FRotator rotation(0.0f, 0.0f, 0.0f);
@@ -130,7 +157,7 @@ void AVoxelWorld::LoadBaseMaterial()
 FIntVector3 AVoxelWorld::WorldToChunkPosition(const FVector& position) const
 {
     FVector relativePosition = position / FVector(VoxelSize);
-    relativePosition /= FVector(AVoxelChunk::VOXEL_CHUNK_SIZE);
+    relativePosition /= FVector(AVoxelBase::VOXEL_CHUNK_SIZE);
     FIntVector3 final = FIntVector3(static_cast<int>(FMath::Floor(relativePosition.X)),
                                     static_cast<int>(FMath::Floor(relativePosition.Y)),
                                     static_cast<int>(FMath::Floor(relativePosition.Z)));

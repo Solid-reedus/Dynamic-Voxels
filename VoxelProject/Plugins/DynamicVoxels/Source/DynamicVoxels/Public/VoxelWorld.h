@@ -7,6 +7,7 @@
 #include "VoxelWorld.generated.h"
 
 class AVoxelChunk;
+class AVoxelConstruct;
 
 UCLASS()
 class DYNAMICVOXELS_API AVoxelWorld : public AActor
@@ -43,11 +44,11 @@ protected:
     virtual void Tick(float DeltaTime) override;
 
 private:
-    UPROPERTY()
-    TMap<FIntVector, AVoxelChunk*> m_voxelChunkInstances;
-    TQueue<FIntVector3> m_chunkAddQueue;
 
+    TQueue<FIntVector3> m_chunkAddQueue;
     FIntVector2 m_prevPawnChunkPosition;
+    TMap<FIntVector, AVoxelChunk*> m_voxelChunkInstances;
+    TArray<AVoxelConstruct*> m_constructInstances;
 
     void CreateNewChunk(const FIntVector3& chunkPosition);
 
@@ -55,6 +56,7 @@ private:
 
     // Converts world space position to chunk space position
     FIntVector3 WorldToChunkPosition(const FVector& position) const;
+
     // Gets the grid distance beween two points
     static int GetGridDistance(const FIntVector2& p1, const FIntVector2& p2);
 };
