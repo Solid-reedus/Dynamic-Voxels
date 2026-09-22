@@ -4,6 +4,7 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "PhysicsEngine/BoxElem.h"
 #include "PhysicsEngine/ConvexElem.h"
+#include "Engine/Texture2DArray.h"
 
 AVoxelBase::AVoxelBase()
 {
@@ -23,24 +24,14 @@ void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
 
 void AVoxelBase::RegenerateMesh()
 {
-    m_vertices.Empty();
-    m_normals.Empty();
-    m_uvs.Empty();
-    m_indices.Empty();
-    m_indexCount = 0;
-
     if (Grid.Data.IsEmpty())
-    {
         return;
-    }
 
-    const uint32 N = Grid.GridSize;
-
-    for (uint32 z = 0; z < N; z++)
+    for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; ++z)
     {
-        for (uint32 y = 0; y < N; y++)
+        for (uint32 y = 1; y <= VOXEL_CHUNK_SIZE; ++y)
         {
-            for (uint32 x = 0; x < N; x++)
+            for (uint32 x = 1; x <= VOXEL_CHUNK_SIZE; ++x)
             {
                 if (Grid.GetVoxel(FUintVector3(x, y, z)) == 0) continue;
 
@@ -108,6 +99,52 @@ void AVoxelBase::RegenerateMesh()
     {
         UE_LOG(LogTemp, Error, TEXT("%s: ProceduralMesh component missing!"), *GetName());
     }
+
+    m_vertices.Empty();
+    m_normals.Empty();
+    m_uvs.Empty();
+    m_indices.Empty();
+    m_indexCount = 0;
+}
+
+void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
+{
+    // Create material and texture if they don't exist yet
+    if (baseMaterial && voxelTextures && m_materialDataCreated == false)
+    {
+        // Create texture to store voxel data
+        uint32 textureHeight = Grid.Data.Num() / VOXEL_GRID_SIZE;
+
+        VoxelDataTexture = UTexture2D::CreateTransient(VOXEL_GRID_SIZE, textureHeight, PF_R8);
+        VoxelDataTexture->CompressionSettings = TextureCompressionSettings::TC_Grayscale;
+        VoxelDataTexture->SRGB = 0;
+        VoxelDataTexture->Filter = TextureFilter::TF_Nearest;
+        VoxelDataTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
+        VoxelDataTexture->CompressionNone = 1;
+
+        // Upload voxel data to texture
+        void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(TargetTextureData, Grid.Data.GetData(), Grid.Data.Num());
+
+        VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+        VoxelDataTexture->UpdateResource();
+
+        // Create material instance for chunk mesh
+        MaterialInstance = UMaterialInstanceDynamic::Create(baseMaterial, this);
+        MaterialInstance->SetTextureParameterValue(TEXT("VoxelTextures"), voxelTextures);
+        MaterialInstance->SetTextureParameterValue(TEXT("VoxelDataTexture"), VoxelDataTexture);
+
+        MaterialInstance->SetScalarParameterValue(TEXT("VoxelSize"), static_cast<float>(VoxelSize));
+        MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(VOXEL_GRID_SIZE));
+
+        ProceduralMesh->SetMaterial(0, MaterialInstance);
+
+        m_materialDataCreated = true;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Missing material data for chunk, cannot assign material!"));
+    }
 }
 
 void AVoxelBase::AddPlane(const FVector& Position,
@@ -173,16 +210,14 @@ void AVoxelBase::CreateCollision()
     BodySetup->AggGeom.BoxElems.Reset();
     BodySetup->AggGeom.ConvexElems.Reset();
 
-    const uint32 N = Grid.GridSize;
-
     if (CollisionType == EVoxelCollisionType::ConvexHull)
     {
         TArray<FVector> HullPoints;
-        for (uint32 z = 0; z < N; ++z)
+        for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; ++z)
         {
-            for (uint32 y = 0; y < N; ++y)
+            for (uint32 y = 1; y <= VOXEL_CHUNK_SIZE; ++y)
             {
-                for (uint32 x = 0; x < N; ++x)
+                for (uint32 x = 1; x <= VOXEL_CHUNK_SIZE; ++x)
                 {
                     if (Grid.GetVoxel(FUintVector3(x, y, z)) == 0) continue;
                     const bool bSurface =

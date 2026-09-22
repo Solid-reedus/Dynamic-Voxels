@@ -14,7 +14,7 @@ void AVoxelConstruct::OnConstruction(const FTransform& Transform)
 
 void AVoxelConstruct::GenerateVoxelData()
 {
-    InitializeGrid(32);
+    Grid.Initialize(VOXEL_GRID_SIZE);
 
     const float center = (float)Grid.GridSize * 0.5f;
 

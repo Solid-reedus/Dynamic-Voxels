@@ -18,24 +18,27 @@ class DYNAMICVOXELS_API AVoxelBase : public AActor
     GENERATED_BODY()
 
 public:
+    static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
+    static constexpr uint32 VOXEL_GRID_SIZE = VOXEL_CHUNK_SIZE + 2;
+
     AVoxelBase();
 
-    UPROPERTY(EditAnywhere, Category = "Voxel")
+    UPROPERTY(VisibleAnywhere, Category = "Voxel")
     EVoxelCollisionType CollisionType = EVoxelCollisionType::ThreeGDM;
 
-    UPROPERTY(EditAnywhere, Category = "Voxel")
+    UPROPERTY(VisibleAnywhere, Category = "Voxel")
     uint32 VoxelSize = 100;
 
     uint8 GetVoxel(const FUintVector3& Position) const { return Grid.GetVoxel(Position); }
     void SetVoxel(const FUintVector3& Position, uint8 Value) { Grid.SetVoxel(Position, Value); }
-    int32 GetGridSize() const { return (int32)Grid.GridSize; }
-    void InitializeGrid(uint32 InGridSize) { Grid.Initialize(InGridSize); }
+    int32 GetGridSize() const { return static_cast<int32>(Grid.GridSize); }
 
 protected:
     virtual void BeginPlay() override;
 
     // make a mesh out of a voxel grid
     void RegenerateMesh();
+    void CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
 
     // SHOULD be called after the mesh is generated, to create collision for the voxel
     void CreateCollision();
@@ -70,4 +73,6 @@ private:
     TArray<FVector2D> m_uvs;
     TArray<int32> m_indices;
     int32 m_indexCount = 0;
+
+    bool m_materialDataCreated = false;
 };

@@ -12,9 +12,6 @@ class DYNAMICVOXELS_API AVoxelChunk : public AVoxelBase
     GENERATED_BODY()
 
 public:
-    static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
-    static constexpr uint32 VOXEL_DATA_SIZE = VOXEL_CHUNK_SIZE + 2;
-
     AVoxelChunk();
 
     void InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
@@ -29,8 +26,6 @@ protected:
 private:
     FIntVector m_chunkPosition;
     bool m_isChunkUniform = false;
-    bool m_materialDataCreated = false;
 
     void GenerateVoxelData(uint32 voxelSize);
-    void CreateMaterialInstance(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
 };

@@ -28,6 +28,13 @@ struct DYNAMICVOXELS_API FVoxelGrid
     {
         if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
         {
+            UE_LOG(LogTemp,
+                   Error,
+                   TEXT("FVoxelGrid: attempting to get invalid voxel position (%u,%u,%u) for GridSize %u"),
+                   Position.X,
+                   Position.Y,
+                   Position.Z,
+                   GridSize);
             return 0;
         }
         return Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X];
