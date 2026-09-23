@@ -20,6 +20,24 @@ AVoxelBase::AVoxelBase()
     ProceduralMesh->SetSimulatePhysics(false);
 }
 
+
+void AVoxelBase::ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value)
+{
+    if (Positions.IsEmpty())
+    {
+        return;
+    }
+
+    for (const FUintVector3& Position : Positions)
+    {
+        Grid.SetVoxel(Position, Value);
+    }
+
+    RegenerateMesh();
+    CreateCollision();
+    OnVoxelsChanged();
+}
+
 void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
 
 void AVoxelBase::RegenerateMesh()
