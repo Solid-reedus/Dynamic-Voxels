@@ -24,6 +24,14 @@ struct DYNAMICVOXELS_API FVoxelGrid
         Data.Init(0, GridSize * GridSize * GridSize);
     }
 
+    bool IsInsideGrid(const FUintVector3& Position) const
+    {
+        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
+            return false;
+        else
+            return true;
+    }
+
     uint8 GetVoxel(const FUintVector3& Position) const
     {
         if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
@@ -39,8 +47,38 @@ struct DYNAMICVOXELS_API FVoxelGrid
         }
         return Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X];
     }
-
     void SetVoxel(const FUintVector3& Position, uint8 Value)
+    {
+        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
+        {
+            UE_LOG(LogTemp,
+                   Error,
+                   TEXT("FVoxelGrid: attempting to set invalid voxel position (%u,%u,%u) for GridSize %u"),
+                   Position.X,
+                   Position.Y,
+                   Position.Z,
+                   GridSize);
+            return;
+        }
+        Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X] = Value;
+    }
+
+    static uint8 GetVoxelFromData(const TArray<uint8>& Data, uint32_t GridSize, const FUintVector3& Position)
+    {
+        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
+        {
+            UE_LOG(LogTemp,
+                   Error,
+                   TEXT("FVoxelGrid: attempting to get invalid voxel position (%u,%u,%u) for GridSize %u"),
+                   Position.X,
+                   Position.Y,
+                   Position.Z,
+                   GridSize);
+            return 0;
+        }
+        return Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X];
+    }
+    static void SetVoxelFromData(TArray<uint8>& Data, uint32_t GridSize, const FUintVector3& Position, uint8 Value)
     {
         if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
         {
