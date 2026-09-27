@@ -35,8 +35,8 @@ public:
     void SetVoxel(const FUintVector3& Position, uint8 Value) { Grid.SetVoxel(Position, Value); }
     int32 GetGridSize() const { return static_cast<int32>(Grid.GridSize); }
 
+	//virtual void ApplyVoxelEdit(const TArray<FIntVector>& Positions, uint8 Value, uint32 Border = 0);
     void ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value);
-
 
 protected:
     virtual void BeginPlay() override;

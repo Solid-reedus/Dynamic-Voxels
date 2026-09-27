@@ -13,5 +13,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Voxel Editing")
     static void RemoveVoxelsInSphere(AVoxelBase* Target, const FVector& WorldLocation, float Radius);
 
+	UFUNCTION(BlueprintCallable, Category = "Voxel Editing")
+    static void AddVoxelsInSphere(AVoxelBase* Target, const FVector& WorldLocation, float Radius, uint8 BlockType = 1);
 	
 };
