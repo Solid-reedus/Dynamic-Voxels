@@ -1,4 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -25,10 +24,11 @@ protected:
     virtual void OnConstruction(const FTransform& Transform) override;
 
     // TODO, implement a proper OnVoxelsChanged for the construct
-    virtual void OnVoxelsChanged() override {}
+    virtual void OnVoxelsChanged() override;
 
 private:
 
+    // IMPORTANT this is testing code, it will generate a random voxel grid for the constructs
     void GenerateVoxelData();
 
     UPROPERTY()
