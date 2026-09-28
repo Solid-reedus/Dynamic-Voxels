@@ -42,9 +42,10 @@ void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
 
 void AVoxelBase::RegenerateMesh()
 {
-    if (Grid.Data.IsEmpty())
-        return;
+    if (Grid.Data.IsEmpty()) return;
 
+    // Wether to use old or new meshing approach
+#if 0
     for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; ++z)
     {
         for (uint32 y = 1; y <= VOXEL_CHUNK_SIZE; ++y)
@@ -53,53 +54,27 @@ void AVoxelBase::RegenerateMesh()
             {
                 if (Grid.GetVoxel(FUintVector3(x, y, z)) == 0) continue;
 
-                FVector voxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
+                FVector VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
+                FVector2D FaceScale = FVector2D(VoxelSize, VoxelSize);
 
-                if (Grid.GetVoxel(FUintVector3(x + 1, y, z)) == 0)
-                    AddPlane(voxelPos,
-                             FVector(VoxelSize, 0.0, 0.0),
-                             FVector(VoxelSize, VoxelSize, 0.0),
-                             FVector(VoxelSize, 0.0, VoxelSize),
-                             FVector(VoxelSize, VoxelSize, VoxelSize),
-                             FVector(1.0, 0.0, 0.0));
-                if (Grid.GetVoxel(FUintVector3(x - 1, y, z)) == 0)
-                    AddPlane(voxelPos,
-                             FVector(0.0, VoxelSize, 0.0),
-                             FVector(0.0, 0.0, 0.0),
-                             FVector(0.0, VoxelSize, VoxelSize),
-                             FVector(0.0, 0.0, VoxelSize),
-                             FVector(-1.0, 0.0, 0.0));
-                if (Grid.GetVoxel(FUintVector3(x, y + 1, z)) == 0)
-                    AddPlane(voxelPos,
-                             FVector(VoxelSize, VoxelSize, 0.0),
-                             FVector(0.0, VoxelSize, 0.0),
-                             FVector(VoxelSize, VoxelSize, VoxelSize),
-                             FVector(0.0, VoxelSize, VoxelSize),
-                             FVector(0.0, 1.0, 0.0));
-                if (Grid.GetVoxel(FUintVector3(x, y - 1, z)) == 0)
-                    AddPlane(voxelPos,
-                             FVector(0.0, 0.0, 0.0),
-                             FVector(VoxelSize, 0.0, 0.0),
-                             FVector(0.0, 0.0, VoxelSize),
-                             FVector(VoxelSize, 0.0, VoxelSize),
-                             FVector(0.0, -1.0, 0.0));
-                if (Grid.GetVoxel(FUintVector3(x, y, z + 1)) == 0)
-                    AddPlane(voxelPos,
-                             FVector(0.0, 0.0, VoxelSize),
-                             FVector(VoxelSize, 0.0, VoxelSize),
-                             FVector(0.0, VoxelSize, VoxelSize),
-                             FVector(VoxelSize, VoxelSize, VoxelSize),
-                             FVector(0.0, 0.0, 1.0));
-                if (Grid.GetVoxel(FUintVector3(x, y, z - 1)) == 0)
-                    AddPlane(voxelPos,
-                             FVector(VoxelSize, 0.0, 0.0),
-                             FVector(0.0, 0.0, 0.0),
-                             FVector(VoxelSize, VoxelSize, 0.0),
-                             FVector(0.0, VoxelSize, 0.0),
-                             FVector(0.0, 0.0, -1.0));
+                if (Grid.GetVoxel(FUintVector3(x + 1, y, z)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_X, FaceScale);
+                if (Grid.GetVoxel(FUintVector3(x - 1, y, z)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_X, FaceScale);
+                if (Grid.GetVoxel(FUintVector3(x, y + 1, z)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_Y, FaceScale);
+                if (Grid.GetVoxel(FUintVector3(x, y - 1, z)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Y, FaceScale);
+                if (Grid.GetVoxel(FUintVector3(x, y, z + 1)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_Z, FaceScale);
+                if (Grid.GetVoxel(FUintVector3(x, y, z - 1)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, FaceScale);
             }
         }
     }
+#else
+    CreateMeshPlanesGreedy(EFaceDirection::POSITIVE_X);
+    CreateMeshPlanesGreedy(EFaceDirection::NEGATIVE_X);
+    CreateMeshPlanesGreedy(EFaceDirection::POSITIVE_Y);
+    CreateMeshPlanesGreedy(EFaceDirection::NEGATIVE_Y);
+    CreateMeshPlanesGreedy(EFaceDirection::POSITIVE_Z);
+    CreateMeshPlanesGreedy(EFaceDirection::NEGATIVE_Z);
+#endif
+
 
     if (ProceduralMesh)
     {
@@ -165,13 +140,206 @@ void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray
     }
 }
 
-void AVoxelBase::AddPlane(const FVector& Position,
-                          const FVector& V0,
-                          const FVector& V1,
-                          const FVector& V2,
-                          const FVector& V3,
-                          const FVector& Normal)
+void AVoxelBase::CreateMeshPlanesGreedy(EFaceDirection FaceDirection)
 {
+    // Copy data into temp data
+    TempGridData.Init(0, Grid.GridSize * Grid.GridSize * Grid.GridSize);
+    memcpy(TempGridData.GetData(), Grid.Data.GetData(), Grid.GridSize * Grid.GridSize * Grid.GridSize);
+
+    FIntVector3 Normal;
+    switch (FaceDirection)
+    {
+        case EFaceDirection::POSITIVE_X:
+            Normal = FIntVector3(1, 0, 0);
+            break;
+        case EFaceDirection::NEGATIVE_X:
+            Normal = FIntVector3(-1, 0, 0);
+            break;
+        case EFaceDirection::POSITIVE_Y:
+            Normal = FIntVector3(0, 1, 0);
+            break;
+        case EFaceDirection::NEGATIVE_Y:
+            Normal = FIntVector3(0, -1, 0);
+            break;
+        case EFaceDirection::POSITIVE_Z:
+            Normal = FIntVector3(0, 0, 1);
+            break;
+        case EFaceDirection::NEGATIVE_Z:
+            Normal = FIntVector3(0, 0, -1);
+            break;
+        default:
+            break;
+    }
+
+    for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; ++z)
+    {
+        for (uint32 y = 1; y <= VOXEL_CHUNK_SIZE; ++y)
+        {
+            for (uint32 x = 1; x <= VOXEL_CHUNK_SIZE; ++x)
+            {
+                if (Grid.GetVoxelFromData(TempGridData, Grid.GridSize, FUintVector3(x, y, z)) == 0) continue;
+                if (Grid.GetVoxel(FUintVector3(FIntVector3(x, y, z) + Normal)) != 0) continue;
+
+                uint32 XScale = VOXEL_CHUNK_SIZE;
+                uint32 YScale = VOXEL_CHUNK_SIZE;
+                bool Finished = false;
+
+                for (uint32 i = 0; i < VOXEL_CHUNK_SIZE; ++i)
+                {
+                    for (uint32 j = 0; j < VOXEL_CHUNK_SIZE; ++j)
+                    {
+                        if (j >= YScale) break;
+
+                        FIntVector3 LoopPos;
+                        switch (FaceDirection)
+                        {
+                            case EFaceDirection::POSITIVE_X:
+                                LoopPos = FIntVector3(0, i, j);
+                                break;
+                            case EFaceDirection::NEGATIVE_X:
+                                LoopPos = FIntVector3(0, i, j);
+                                break;
+                            case EFaceDirection::POSITIVE_Y:
+                                LoopPos = FIntVector3(i, 0, j);
+                                break;
+                            case EFaceDirection::NEGATIVE_Y:
+                                LoopPos = FIntVector3(i, 0, j);
+                                break;
+                            case EFaceDirection::POSITIVE_Z:
+                                LoopPos = FIntVector3(i, j, 0);
+                                break;
+                            case EFaceDirection::NEGATIVE_Z:
+                                LoopPos = FIntVector3(i, j, 0);
+                                break;
+                            default:
+                                break;
+                        }
+                        FUintVector3 CheckPosInfront = FUintVector3(FIntVector3(x, y, z) + LoopPos + Normal);
+                        FUintVector3 CheckPos = FUintVector3(FIntVector3(x, y, z) + LoopPos);
+                        if (CheckPos.X > VOXEL_CHUNK_SIZE || CheckPos.Y > VOXEL_CHUNK_SIZE ||
+                            CheckPos.Z > VOXEL_CHUNK_SIZE ||
+                            Grid.GetVoxel(CheckPosInfront) != 0 ||
+                            Grid.GetVoxelFromData(TempGridData, Grid.GridSize, CheckPos) == 0)
+                        {
+                            if (i != 0)
+                            {
+                                Finished = true;
+                                break;
+                            }
+                            YScale = j;
+                            break;
+                        }
+                    }
+                    if (Finished)
+                    {
+                        XScale = i;
+                        break;
+                    }
+                }
+
+                for (uint32 i = 0; i < XScale; ++i)
+                {
+                    for (uint32 j = 0; j < YScale; ++j)
+                    {
+                        FIntVector3 LoopPos;
+                        switch (FaceDirection)
+                        {
+                            case EFaceDirection::POSITIVE_X:
+                                LoopPos = FIntVector3(0, i, j);
+                                break;
+                            case EFaceDirection::NEGATIVE_X:
+                                LoopPos = FIntVector3(0, i, j);
+                                break;
+                            case EFaceDirection::POSITIVE_Y:
+                                LoopPos = FIntVector3(i, 0, j);
+                                break;
+                            case EFaceDirection::NEGATIVE_Y:
+                                LoopPos = FIntVector3(i, 0, j);
+                                break;
+                            case EFaceDirection::POSITIVE_Z:
+                                LoopPos = FIntVector3(i, j, 0);
+                                break;
+                            case EFaceDirection::NEGATIVE_Z:
+                                LoopPos = FIntVector3(i, j, 0);
+                                break;
+                            default:
+                                break;
+                        }
+                        FUintVector3 CheckPos = FUintVector3(FIntVector3(x, y, z) + LoopPos);
+                        // Set this voxel temporarily to air, so that we dont try and create a face here again.
+                        Grid.SetVoxelFromData(TempGridData, Grid.GridSize, CheckPos, 0);
+                    }
+                }
+
+                if (XScale > 0 && YScale > 0)
+                {
+                    FVector VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
+                    FVector2D FaceScale = FVector2D(XScale * VoxelSize, YScale * VoxelSize);
+                    AddFace(VoxelPos, FaceDirection, FaceScale);
+                }
+            }
+        }
+    }
+
+    TempGridData.Empty();
+}
+
+void AVoxelBase::AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale)
+{
+    FVector V0;
+    FVector V1;
+    FVector V2;
+    FVector V3;
+
+    FVector Normal;
+    switch (FaceDirection)
+    {
+        case EFaceDirection::POSITIVE_X:
+            V0 = FVector(VoxelSize, 0.0, 0.0);
+            V1 = FVector(VoxelSize, Scale.X, 0.0);
+            V2 = FVector(VoxelSize, 0.0, Scale.Y);
+            V3 = FVector(VoxelSize, Scale.X, Scale.Y);
+            Normal = FVector(1.0, 0.0, 0.0);
+            break;
+        case EFaceDirection::NEGATIVE_X:
+            V0 = FVector(0.0, Scale.X, 0.0);
+            V1 = FVector(0.0, 0.0, 0.0);
+            V2 = FVector(0.0, Scale.X, Scale.Y);
+            V3 = FVector(0.0, 0.0, Scale.Y);
+            Normal = FVector(-1.0, 0.0, 0.0);
+            break;
+        case EFaceDirection::POSITIVE_Y:
+            V0 = FVector(Scale.X, VoxelSize, 0.0);
+            V1 = FVector(0.0, VoxelSize, 0.0);
+            V2 = FVector(Scale.X, VoxelSize, Scale.Y);
+            V3 = FVector(0.0, VoxelSize, Scale.Y);
+            Normal = FVector(0.0, 1.0, 0.0);
+            break;
+        case EFaceDirection::NEGATIVE_Y:
+            V0 = FVector(0.0, 0.0, 0.0);
+            V1 = FVector(Scale.X, 0.0, 0.0);
+            V2 = FVector(0.0, 0.0, Scale.Y);
+            V3 = FVector(Scale.X, 0.0, Scale.Y);
+            Normal = FVector(0.0, -1.0, 0.0);
+            break;
+        case EFaceDirection::POSITIVE_Z:
+            V0 = FVector(0.0, 0.0, VoxelSize);
+            V1 = FVector(Scale.X, 0.0, VoxelSize);
+            V2 = FVector(0.0, Scale.Y, VoxelSize);
+            V3 = FVector(Scale.X, Scale.Y, VoxelSize);
+            Normal = FVector(0.0, 0.0, 1.0);
+            break;
+        case EFaceDirection::NEGATIVE_Z:
+            V0 = FVector(Scale.X, 0.0, 0.0);
+            V1 = FVector(0.0, 0.0, 0.0);
+            V2 = FVector(Scale.X, Scale.Y, 0.0);
+            V3 = FVector(0.0, Scale.Y, 0.0);
+            Normal = FVector(0.0, 0.0, -1.0);
+            break;
+        default:
+            break;
+    }
+
     m_vertices.Add(V0 + Position);
     m_vertices.Add(V1 + Position);
     m_vertices.Add(V2 + Position);

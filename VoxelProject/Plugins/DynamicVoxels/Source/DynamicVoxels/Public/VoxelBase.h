@@ -7,6 +7,16 @@
 #include "VoxelGrid.h"
 #include "VoxelBase.generated.h"
 
+UENUM()
+enum class EFaceDirection
+{
+    POSITIVE_X,
+    NEGATIVE_X,
+    POSITIVE_Y,
+    NEGATIVE_Y,
+    POSITIVE_Z,
+    NEGATIVE_Z
+};
 
 /*
     base class for voxel-based actors, it has all basic functionality to manage 
@@ -66,18 +76,16 @@ protected:
 
 private:
 
-    inline void AddPlane(const FVector& Position,
-                         const FVector& V0,
-                         const FVector& V1,
-                         const FVector& V2,
-                         const FVector& V3,
-                         const FVector& Normal);
+    void CreateMeshPlanesGreedy(EFaceDirection FaceDirection);
+    inline void AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale);
 
     TArray<FVector> m_vertices;
     TArray<FVector> m_normals;
     TArray<FVector2D> m_uvs;
     TArray<int32> m_indices;
     int32 m_indexCount = 0;
+
+    TArray<uint8> TempGridData;
 
     bool m_materialDataCreated = false;
 };
