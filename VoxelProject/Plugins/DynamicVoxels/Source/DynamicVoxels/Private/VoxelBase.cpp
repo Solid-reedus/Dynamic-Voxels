@@ -193,13 +193,13 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(EFaceDirection FaceDirection)
             uint64 CurColumn = (*OriginPlaneBitData)[CurIndex];
             uint64 FrontColumn = (*OriginPlaneBitData)[FrontIndex];
 
-            uint64 CanHaveFaceColumn = (CurColumn ^ FrontColumn) & (~FrontColumn);
+            uint64 CanHaveFaceColumn = CurColumn & ~FrontColumn;
 
             if (CanHaveFaceColumn == 0) continue;
 
             for (uint32 z = 0; z < VOXEL_CHUNK_SIZE;)
             {
-                uint64 Shifted = (CanHaveFaceColumn >> z);
+                uint64 Shifted = CanHaveFaceColumn >> z;
 
                 if ((Shifted & 1u) == 0)
                 {
@@ -273,14 +273,14 @@ void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
             uint64 CurColumn = TempPlaneBitData[CurIndex];
             uint64 FrontColumn = (*OriginPlaneBitData)[FrontIndex];
 
-            uint64 CanHaveFaceColumn = (CurColumn ^ FrontColumn) & (~FrontColumn);
+            uint64 CanHaveFaceColumn = CurColumn & ~FrontColumn;
 
             // No faces can be generated anywhere, so continue
             if (CanHaveFaceColumn == 0) continue;
 
             for (uint32 z = 0; z < VOXEL_CHUNK_SIZE;)
             {
-                uint64 Shifted = (CanHaveFaceColumn >> z);
+                uint64 Shifted = CanHaveFaceColumn >> z;
 
                 if ((Shifted & 1u) == 0)
                 {
@@ -323,8 +323,8 @@ void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
                         uint64 CheckCurColumn = TempPlaneBitData[CheckCurIndex];
                         uint64 CheckFrontColumn = (*OriginPlaneBitData)[CheckFrontIndex];
 
-                        uint64 CheckCanHaveFaceColumn = (CheckCurColumn ^ CheckFrontColumn) & (~CheckFrontColumn);
-                        uint64 CheckShifted = (CheckCanHaveFaceColumn >> z);
+                        uint64 CheckCanHaveFaceColumn = CheckCurColumn & ~CheckFrontColumn;
+                        uint64 CheckShifted = CheckCanHaveFaceColumn >> z;
                         uint64 CheckShiftedMasked = CheckShifted & CheckMask;
 
                         // Check if face's width cannot be expanded anymore
