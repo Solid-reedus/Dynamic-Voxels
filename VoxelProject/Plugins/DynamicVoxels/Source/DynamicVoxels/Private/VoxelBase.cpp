@@ -6,6 +6,12 @@
 #include "PhysicsEngine/ConvexElem.h"
 #include "Engine/Texture2DArray.h"
 
+// Which voxel meshing approach to use
+// 0 = Basic Face Culling (OUTDATED, DO NOT USE!)
+// 1 = 1D Greedy Meshing
+// 2 = Regular Greedy Meshing
+#define MESHING_METHOD 2
+
 AVoxelBase::AVoxelBase()
 {
     PrimaryActorTick.bCanEverTick = false;
@@ -20,7 +26,6 @@ AVoxelBase::AVoxelBase()
     ProceduralMesh->SetSimulatePhysics(false);
 }
 
-
 void AVoxelBase::ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value)
 {
     if (Positions.IsEmpty())
@@ -30,7 +35,7 @@ void AVoxelBase::ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Val
 
     for (const FUintVector3& Position : Positions)
     {
-        Grid.SetVoxel(Position, Value);
+        Grid.SetVoxel(FIntVector3(Position), Value);
     }
 
     RegenerateMesh();
@@ -44,13 +49,12 @@ void AVoxelBase::RegenerateMesh()
 {
     if (Grid.Data.IsEmpty()) return;
 
-    // Wether to use old or new meshing approach
-#if 0
-    for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; ++z)
+#if MESHING_METHOD == 0
+    for (int z = 0; z < VOXEL_CHUNK_SIZE; ++z)
     {
-        for (uint32 y = 1; y <= VOXEL_CHUNK_SIZE; ++y)
+        for (int y = 0; y < VOXEL_CHUNK_SIZE; ++y)
         {
-            for (uint32 x = 1; x <= VOXEL_CHUNK_SIZE; ++x)
+            for (int x = 0; x < VOXEL_CHUNK_SIZE; ++x)
             {
                 if (Grid.GetVoxel(FUintVector3(x, y, z)) == 0) continue;
 
@@ -66,38 +70,43 @@ void AVoxelBase::RegenerateMesh()
             }
         }
     }
-#else
-    CreateMeshPlanesGreedy(EFaceDirection::POSITIVE_X);
-    CreateMeshPlanesGreedy(EFaceDirection::NEGATIVE_X);
-    CreateMeshPlanesGreedy(EFaceDirection::POSITIVE_Y);
-    CreateMeshPlanesGreedy(EFaceDirection::NEGATIVE_Y);
-    CreateMeshPlanesGreedy(EFaceDirection::POSITIVE_Z);
-    CreateMeshPlanesGreedy(EFaceDirection::NEGATIVE_Z);
+#elif MESHING_METHOD == 1
+    CreateMeshPlaneGreedy1D(EFaceDirection::POSITIVE_X);
+    CreateMeshPlaneGreedy1D(EFaceDirection::NEGATIVE_X);
+    CreateMeshPlaneGreedy1D(EFaceDirection::POSITIVE_Y);
+    CreateMeshPlaneGreedy1D(EFaceDirection::NEGATIVE_Y);
+    CreateMeshPlaneGreedy1D(EFaceDirection::POSITIVE_Z);
+    CreateMeshPlaneGreedy1D(EFaceDirection::NEGATIVE_Z);
+#elif MESHING_METHOD == 2
+    CreateMeshPlaneGreedy(EFaceDirection::POSITIVE_X);
+    CreateMeshPlaneGreedy(EFaceDirection::NEGATIVE_X);
+    CreateMeshPlaneGreedy(EFaceDirection::POSITIVE_Y);
+    CreateMeshPlaneGreedy(EFaceDirection::NEGATIVE_Y);
+    CreateMeshPlaneGreedy(EFaceDirection::POSITIVE_Z);
+    CreateMeshPlaneGreedy(EFaceDirection::NEGATIVE_Z);
 #endif
-
 
     if (ProceduralMesh)
     {
         ProceduralMesh->ClearAllMeshSections();
         ProceduralMesh->CreateMeshSection_LinearColor(0,
-                                                      m_vertices,
-                                                      m_indices,
-                                                      m_normals,
-                                                      m_uvs,
+                                                      Vertices,
+                                                      Indices,
+                                                      Normals,
+                                                      TArray<FVector2D>(),
                                                       TArray<FLinearColor>(),
                                                       TArray<FProcMeshTangent>(),
-                                                      false);  
+                                                      false);
     }
     else
     {
         UE_LOG(LogTemp, Error, TEXT("%s: ProceduralMesh component missing!"), *GetName());
     }
 
-    m_vertices.Empty();
-    m_normals.Empty();
-    m_uvs.Empty();
-    m_indices.Empty();
-    m_indexCount = 0;
+    Vertices.Empty();
+    Normals.Empty();
+    Indices.Empty();
+    IndexCount = 0;
 }
 
 void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
@@ -106,9 +115,9 @@ void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray
     if (baseMaterial && voxelTextures && m_materialDataCreated == false)
     {
         // Create texture to store voxel data
-        uint32 textureHeight = Grid.Data.Num() / VOXEL_GRID_SIZE;
+        uint32 textureHeight = Grid.Data.Num() / Grid.GridSize;
 
-        VoxelDataTexture = UTexture2D::CreateTransient(VOXEL_GRID_SIZE, textureHeight, PF_R8);
+        VoxelDataTexture = UTexture2D::CreateTransient(Grid.GridSize, textureHeight, PF_R8);
         VoxelDataTexture->CompressionSettings = TextureCompressionSettings::TC_Grayscale;
         VoxelDataTexture->SRGB = 0;
         VoxelDataTexture->Filter = TextureFilter::TF_Nearest;
@@ -128,7 +137,7 @@ void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray
         MaterialInstance->SetTextureParameterValue(TEXT("VoxelDataTexture"), VoxelDataTexture);
 
         MaterialInstance->SetScalarParameterValue(TEXT("VoxelSize"), static_cast<float>(VoxelSize));
-        MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(VOXEL_GRID_SIZE));
+        MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(Grid.GridSize));
 
         ProceduralMesh->SetMaterial(0, MaterialInstance);
 
@@ -140,148 +149,218 @@ void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray
     }
 }
 
-void AVoxelBase::CreateMeshPlanesGreedy(EFaceDirection FaceDirection)
+void AVoxelBase::CreateMeshPlaneGreedy1D(EFaceDirection FaceDirection)
 {
-    // Copy data into temp data
-    TempGridData.Init(0, Grid.GridSize * Grid.GridSize * Grid.GridSize);
-    memcpy(TempGridData.GetData(), Grid.Data.GetData(), Grid.GridSize * Grid.GridSize * Grid.GridSize);
+    FIntVector2 Normal;
+    bool UsingXZPlane = false;
 
-    FIntVector3 Normal;
     switch (FaceDirection)
     {
         case EFaceDirection::POSITIVE_X:
-            Normal = FIntVector3(1, 0, 0);
+            Normal = FIntVector2(1, 0);
             break;
         case EFaceDirection::NEGATIVE_X:
-            Normal = FIntVector3(-1, 0, 0);
+            Normal = FIntVector2(-1, 0);
             break;
         case EFaceDirection::POSITIVE_Y:
-            Normal = FIntVector3(0, 1, 0);
+            Normal = FIntVector2(0, 1);
             break;
         case EFaceDirection::NEGATIVE_Y:
-            Normal = FIntVector3(0, -1, 0);
+            Normal = FIntVector2(0, -1);
             break;
         case EFaceDirection::POSITIVE_Z:
-            Normal = FIntVector3(0, 0, 1);
+            Normal = FIntVector2(0, 1);
+            UsingXZPlane = true;
             break;
         case EFaceDirection::NEGATIVE_Z:
-            Normal = FIntVector3(0, 0, -1);
+            Normal = FIntVector2(0, -1);
+            UsingXZPlane = true;
             break;
         default:
             break;
     }
 
-    for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; ++z)
+    const TArray<uint64>* OriginPlaneBitData = &Grid.XYPlaneBitData;
+    if (UsingXZPlane) OriginPlaneBitData = &Grid.XZPlaneBitData;
+
+    for (int y = 0; y < VOXEL_CHUNK_SIZE; ++y)
     {
-        for (uint32 y = 1; y <= VOXEL_CHUNK_SIZE; ++y)
+        for (int x = 0; x < VOXEL_CHUNK_SIZE; ++x)
         {
-            for (uint32 x = 1; x <= VOXEL_CHUNK_SIZE; ++x)
+            int CurIndex = Grid.GetBitPlaneIndex(x, y);
+            int FrontIndex = Grid.GetBitPlaneIndex(x + Normal.X, y + Normal.Y);
+
+            uint64 CurColumn = (*OriginPlaneBitData)[CurIndex];
+            uint64 FrontColumn = (*OriginPlaneBitData)[FrontIndex];
+
+            uint64 CanHaveFaceColumn = (CurColumn ^ FrontColumn) & (~FrontColumn);
+
+            if (CanHaveFaceColumn == 0) continue;
+
+            for (uint32 z = 0; z < VOXEL_CHUNK_SIZE;)
             {
-                if (Grid.GetVoxelFromData(TempGridData, Grid.GridSize, FUintVector3(x, y, z)) == 0) continue;
-                if (Grid.GetVoxel(FUintVector3(FIntVector3(x, y, z) + Normal)) != 0) continue;
+                uint64 Shifted = (CanHaveFaceColumn >> z);
 
-                uint32 XScale = VOXEL_CHUNK_SIZE;
-                uint32 YScale = VOXEL_CHUNK_SIZE;
-                bool Finished = false;
-
-                for (uint32 i = 0; i < VOXEL_CHUNK_SIZE; ++i)
+                if ((Shifted & 1u) == 0)
                 {
-                    for (uint32 j = 0; j < VOXEL_CHUNK_SIZE; ++j)
-                    {
-                        if (j >= YScale) break;
+                    uint32 Leading0s = FMath::CountTrailingZeros64(Shifted);
+                    z += Leading0s;
+                }
+                else
+                {
+                    uint32 Leading1s = FMath::CountTrailingZeros64(~Shifted);
 
-                        FIntVector3 LoopPos;
+                    FVector VoxelPos;
+                    if (UsingXZPlane)
+                        VoxelPos = FVector(x * VoxelSize, z * VoxelSize, y * VoxelSize);
+                    else
+                        VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
+
+                    FVector2D FaceScale = FVector2D(VoxelSize, Leading1s * VoxelSize);
+                    AddFace(VoxelPos, FaceDirection, FaceScale);
+
+                    z += Leading1s;
+                }
+            }
+        }
+    }
+}
+
+void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
+{
+    FIntVector2 Normal;
+    bool UsingXZPlane = false;
+
+    switch (FaceDirection)
+    {
+        case EFaceDirection::POSITIVE_X:
+            Normal = FIntVector2(1, 0);
+            break;
+        case EFaceDirection::NEGATIVE_X:
+            Normal = FIntVector2(-1, 0);
+            break;
+        case EFaceDirection::POSITIVE_Y:
+            Normal = FIntVector2(0, 1);
+            break;
+        case EFaceDirection::NEGATIVE_Y:
+            Normal = FIntVector2(0, -1);
+            break;
+        case EFaceDirection::POSITIVE_Z:
+            Normal = FIntVector2(0, 1);
+            UsingXZPlane = true;
+            break;
+        case EFaceDirection::NEGATIVE_Z:
+            Normal = FIntVector2(0, -1);
+            UsingXZPlane = true;
+            break;
+        default:
+            break;
+    }
+
+    const TArray<uint64>* OriginPlaneBitData = &Grid.XYPlaneBitData;
+    if (UsingXZPlane) OriginPlaneBitData = &Grid.XZPlaneBitData;
+
+    TempPlaneBitData.Init(0, Grid.BitGridSize * Grid.BitGridSize);
+    memcpy(TempPlaneBitData.GetData(), OriginPlaneBitData->GetData(), Grid.BitGridSize * Grid.BitGridSize * sizeof(uint64));
+
+    for (int y = 0; y < VOXEL_CHUNK_SIZE; ++y)
+    {
+        for (int x = 0; x < VOXEL_CHUNK_SIZE; ++x)
+        {
+            int CurIndex = Grid.GetBitPlaneIndex(x, y);
+            int FrontIndex = Grid.GetBitPlaneIndex(x + Normal.X, y + Normal.Y);
+
+            uint64 CurColumn = TempPlaneBitData[CurIndex];
+            uint64 FrontColumn = (*OriginPlaneBitData)[FrontIndex];
+
+            uint64 CanHaveFaceColumn = (CurColumn ^ FrontColumn) & (~FrontColumn);
+
+            // No faces can be generated anywhere, so continue
+            if (CanHaveFaceColumn == 0) continue;
+
+            for (uint32 z = 0; z < VOXEL_CHUNK_SIZE;)
+            {
+                uint64 Shifted = (CanHaveFaceColumn >> z);
+
+                if ((Shifted & 1u) == 0)
+                {
+                    // Air block (0-bits), so skip to where there are no more air
+                    uint32 Leading0s = FMath::CountTrailingZeros64(Shifted);
+                    z += Leading0s;
+                }
+                else
+                {
+                    // The height of the face
+                    uint32 Leading1s = FMath::CountTrailingZeros64(~Shifted);
+                    // The width of the face
+                    uint32 XScale = 0;
+
+                    // Creates n 1-bits at least significant bits, where n = Leading1s
+                    uint64 CheckMask = ((1ui64 << Leading1s) - 1);
+
+                    for (uint32 i = 1; i < VOXEL_CHUNK_SIZE; ++i)
+                    {
+                        FIntVector2 LoopPos;
                         switch (FaceDirection)
                         {
                             case EFaceDirection::POSITIVE_X:
-                                LoopPos = FIntVector3(0, i, j);
-                                break;
                             case EFaceDirection::NEGATIVE_X:
-                                LoopPos = FIntVector3(0, i, j);
+                                LoopPos = FIntVector2(0, i);
                                 break;
                             case EFaceDirection::POSITIVE_Y:
-                                LoopPos = FIntVector3(i, 0, j);
-                                break;
                             case EFaceDirection::NEGATIVE_Y:
-                                LoopPos = FIntVector3(i, 0, j);
-                                break;
                             case EFaceDirection::POSITIVE_Z:
-                                LoopPos = FIntVector3(i, j, 0);
-                                break;
                             case EFaceDirection::NEGATIVE_Z:
-                                LoopPos = FIntVector3(i, j, 0);
+                                LoopPos = FIntVector2(i, 0);
                                 break;
                             default:
                                 break;
                         }
-                        FUintVector3 CheckPosInfront = FUintVector3(FIntVector3(x, y, z) + LoopPos + Normal);
-                        FUintVector3 CheckPos = FUintVector3(FIntVector3(x, y, z) + LoopPos);
-                        if (CheckPos.X > VOXEL_CHUNK_SIZE || CheckPos.Y > VOXEL_CHUNK_SIZE ||
-                            CheckPos.Z > VOXEL_CHUNK_SIZE ||
-                            Grid.GetVoxel(CheckPosInfront) != 0 ||
-                            Grid.GetVoxelFromData(TempGridData, Grid.GridSize, CheckPos) == 0)
+
+                        int CheckCurIndex = Grid.GetBitPlaneIndex(x + LoopPos.X, y + LoopPos.Y);
+                        int CheckFrontIndex = Grid.GetBitPlaneIndex(x + LoopPos.X + Normal.X, y + LoopPos.Y + Normal.Y);
+
+                        uint64 CheckCurColumn = TempPlaneBitData[CheckCurIndex];
+                        uint64 CheckFrontColumn = (*OriginPlaneBitData)[CheckFrontIndex];
+
+                        uint64 CheckCanHaveFaceColumn = (CheckCurColumn ^ CheckFrontColumn) & (~CheckFrontColumn);
+                        uint64 CheckShifted = (CheckCanHaveFaceColumn >> z);
+                        uint64 CheckShiftedMasked = CheckShifted & CheckMask;
+
+                        // Check if face's width cannot be expanded anymore
+                        if (CheckShiftedMasked != CheckMask || x + LoopPos.X >= VOXEL_CHUNK_SIZE ||
+                            y + LoopPos.Y >= VOXEL_CHUNK_SIZE)
                         {
-                            if (i != 0)
-                            {
-                                Finished = true;
-                                break;
-                            }
-                            YScale = j;
+                            XScale = i;
                             break;
                         }
-                    }
-                    if (Finished)
-                    {
-                        XScale = i;
-                        break;
-                    }
-                }
-
-                for (uint32 i = 0; i < XScale; ++i)
-                {
-                    for (uint32 j = 0; j < YScale; ++j)
-                    {
-                        FIntVector3 LoopPos;
-                        switch (FaceDirection)
+                        else
                         {
-                            case EFaceDirection::POSITIVE_X:
-                                LoopPos = FIntVector3(0, i, j);
-                                break;
-                            case EFaceDirection::NEGATIVE_X:
-                                LoopPos = FIntVector3(0, i, j);
-                                break;
-                            case EFaceDirection::POSITIVE_Y:
-                                LoopPos = FIntVector3(i, 0, j);
-                                break;
-                            case EFaceDirection::NEGATIVE_Y:
-                                LoopPos = FIntVector3(i, 0, j);
-                                break;
-                            case EFaceDirection::POSITIVE_Z:
-                                LoopPos = FIntVector3(i, j, 0);
-                                break;
-                            case EFaceDirection::NEGATIVE_Z:
-                                LoopPos = FIntVector3(i, j, 0);
-                                break;
-                            default:
-                                break;
+                            // Set bits to 0 in area where the new face will be,
+                            // to prevent another face to be generated there during future iterations of these loops
+                            TempPlaneBitData[CheckCurIndex] = CheckCurColumn & ~(CheckMask << z);
                         }
-                        FUintVector3 CheckPos = FUintVector3(FIntVector3(x, y, z) + LoopPos);
-                        // Set this voxel temporarily to air, so that we dont try and create a face here again.
-                        Grid.SetVoxelFromData(TempGridData, Grid.GridSize, CheckPos, 0);
                     }
-                }
 
-                if (XScale > 0 && YScale > 0)
-                {
-                    FVector VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
-                    FVector2D FaceScale = FVector2D(XScale * VoxelSize, YScale * VoxelSize);
-                    AddFace(VoxelPos, FaceDirection, FaceScale);
+                    if (XScale > 0)
+                    {
+                        FVector VoxelPos;
+                        if (UsingXZPlane)
+                            VoxelPos = FVector(x * VoxelSize, z * VoxelSize, y * VoxelSize);
+                        else
+                            VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
+
+                        FVector2D FaceScale = FVector2D(XScale * VoxelSize, Leading1s * VoxelSize);
+                        AddFace(VoxelPos, FaceDirection, FaceScale);
+                    }
+
+                    z += Leading1s;
                 }
             }
         }
     }
 
-    TempGridData.Empty();
+    TempPlaneBitData.Empty();
 }
 
 void AVoxelBase::AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale)
@@ -340,29 +419,24 @@ void AVoxelBase::AddFace(const FVector& Position, EFaceDirection FaceDirection, 
             break;
     }
 
-    m_vertices.Add(V0 + Position);
-    m_vertices.Add(V1 + Position);
-    m_vertices.Add(V2 + Position);
-    m_vertices.Add(V3 + Position);
+    Vertices.Add(V0 + Position);
+    Vertices.Add(V1 + Position);
+    Vertices.Add(V2 + Position);
+    Vertices.Add(V3 + Position);
 
-    m_normals.Add(Normal);
-    m_normals.Add(Normal);
-    m_normals.Add(Normal);
-    m_normals.Add(Normal);
+    Normals.Add(Normal);
+    Normals.Add(Normal);
+    Normals.Add(Normal);
+    Normals.Add(Normal);
 
-    m_uvs.Add(FVector2D(0.0, 0.0));
-    m_uvs.Add(FVector2D(1.0, 0.0));
-    m_uvs.Add(FVector2D(0.0, 1.0));
-    m_uvs.Add(FVector2D(1.0, 1.0));
+    Indices.Add(2 + IndexCount);
+    Indices.Add(1 + IndexCount);
+    Indices.Add(0 + IndexCount);
+    Indices.Add(2 + IndexCount);
+    Indices.Add(3 + IndexCount);
+    Indices.Add(1 + IndexCount);
 
-    m_indices.Add(2 + m_indexCount);
-    m_indices.Add(1 + m_indexCount);
-    m_indices.Add(0 + m_indexCount);
-    m_indices.Add(2 + m_indexCount);
-    m_indices.Add(3 + m_indexCount);
-    m_indices.Add(1 + m_indexCount);
-
-    m_indexCount += 4;
+    IndexCount += 4;
 }
 
 void AVoxelBase::CreateCollision()
@@ -399,17 +473,17 @@ void AVoxelBase::CreateCollision()
     if (CollisionType == EVoxelCollisionType::ConvexHull)
     {
         TArray<FVector> HullPoints;
-        for (uint32 z = 1; z <= VOXEL_CHUNK_SIZE; ++z)
+        for (uint32 z = 0; z < VOXEL_CHUNK_SIZE; ++z)
         {
-            for (uint32 y = 1; y <= VOXEL_CHUNK_SIZE; ++y)
+            for (uint32 y = 0; y < VOXEL_CHUNK_SIZE; ++y)
             {
-                for (uint32 x = 1; x <= VOXEL_CHUNK_SIZE; ++x)
+                for (uint32 x = 0; x < VOXEL_CHUNK_SIZE; ++x)
                 {
-                    if (Grid.GetVoxel(FUintVector3(x, y, z)) == 0) continue;
+                    if (Grid.GetVoxel(FIntVector3(x, y, z)) == 0) continue;
                     const bool bSurface =
-                        Grid.GetVoxel(FUintVector3(x - 1, y, z)) == 0 || Grid.GetVoxel(FUintVector3(x + 1, y, z)) == 0 ||
-                        Grid.GetVoxel(FUintVector3(x, y - 1, z)) == 0 || Grid.GetVoxel(FUintVector3(x, y + 1, z)) == 0 ||
-                        Grid.GetVoxel(FUintVector3(x, y, z - 1)) == 0 || Grid.GetVoxel(FUintVector3(x, y, z + 1)) == 0;
+                        Grid.GetVoxel(FIntVector3(x - 1, y, z)) == 0 || Grid.GetVoxel(FIntVector3(x + 1, y, z)) == 0 ||
+                        Grid.GetVoxel(FIntVector3(x, y - 1, z)) == 0 || Grid.GetVoxel(FIntVector3(x, y + 1, z)) == 0 ||
+                        Grid.GetVoxel(FIntVector3(x, y, z - 1)) == 0 || Grid.GetVoxel(FIntVector3(x, y, z + 1)) == 0;
                     if (!bSurface) continue;
 
                     const FVector Min = FVector((float)x, (float)y, (float)z) * VoxelSize;
