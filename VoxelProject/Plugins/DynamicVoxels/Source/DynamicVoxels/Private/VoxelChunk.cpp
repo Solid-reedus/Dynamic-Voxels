@@ -2,6 +2,8 @@
 
 #include "VoxelChunk.h"
 
+#define SUPERFLAT_WORLDGEN 0
+
 // Sets default values
 AVoxelChunk::AVoxelChunk() { PrimaryActorTick.bCanEverTick = false; }
 
@@ -41,14 +43,17 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
         {
             FIntVector2 topDownPosition = FIntVector2(x + relativePosition.X, y + relativePosition.Y);
 
-            double perlin2DValBiome = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 128.0) * 0.5 + 0.5;
+            double perlin2DValBiome = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 200.0) * 0.5 + 0.5;
 
             double perlin2DVal = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 160.0) * 0.5 + 0.5;
             if (perlin2DValBiome > 0.5) topDownPosition += FIntVector2(100, 100);
-            double perlin2DValDetail = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 48.0) * 0.5 + 0.5;
+            double perlin2DValDetail = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 64.0) * 0.5 + 0.5;
 
             int terrainValue = static_cast<int>(perlin2DVal * perlin2DVal * 80.0 + 48.0 + perlin2DValDetail * 20.0);
-            if (perlin2DValBiome > 0.5) terrainValue -= 10;
+            if (perlin2DValBiome > 0.5) terrainValue -= static_cast<int>(perlin2DValBiome * 10.0);
+#if SUPERFLAT_WORLDGEN
+            terrainValue = 48;
+#endif
             terrainValue -= relativePosition.Z;
 
             double BlockChoice = FMath::RandRange(0.0, 1.0);
