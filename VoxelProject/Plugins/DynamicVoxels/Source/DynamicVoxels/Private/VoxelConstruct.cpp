@@ -52,7 +52,7 @@ void AVoxelConstruct::OnVoxelsChanged()
             for (int32 x = 0; x < N; ++x)
             {
                 const int32 StartIndex = (z * N + y) * N + x;
-                if (Visited[StartIndex] || Grid.GetVoxel(FUintVector3(x, y, z)) == 0)
+                if (Visited[StartIndex] || Grid.GetVoxel(FIntVector3(x, y, z)) == 0)
                 {
                     continue;
                 }
@@ -79,7 +79,7 @@ void AVoxelConstruct::OnVoxelsChanged()
                         }
 
                         const int32 NeighborIndex = (NZ * N + NY) * N + NX;
-                        if (Visited[NeighborIndex] || Grid.GetVoxel(FUintVector3(NX, NY, NZ)) == 0)
+                        if (Visited[NeighborIndex] || Grid.GetVoxel(FIntVector3(NX, NY, NZ)) == 0)
                         {
                             continue;
                         }
@@ -124,8 +124,8 @@ void AVoxelConstruct::OnVoxelsChanged()
         PieceGrid.Initialize(Grid.GridSize);
         for (const FIntVector& Position : Islands[i])
         {
-            const FUintVector3 UPosition(static_cast<uint32>(Position.X), static_cast<uint32>(Position.Y), static_cast<uint32>(Position.Z));
-            PieceGrid.SetVoxel(UPosition, Grid.GetVoxel(UPosition));
+            //const FUintVector3 UPosition(static_cast<uint32>(Position.X), static_cast<uint32>(Position.Y), static_cast<uint32>(Position.Z));
+            PieceGrid.SetVoxel(Position, Grid.GetVoxel(Position));
         }
 
         AVoxelConstruct* NewPiece = GetWorld()->SpawnActor<AVoxelConstruct>(GetClass(), GetActorTransform());
@@ -139,8 +139,8 @@ void AVoxelConstruct::OnVoxelsChanged()
     LargestGrid.Initialize(Grid.GridSize);
     for (const FIntVector& Position : Islands[LargestIndex])
     {
-        const FUintVector3 UPosition(static_cast<uint32>(Position.X), static_cast<uint32>(Position.Y), static_cast<uint32>(Position.Z));
-        LargestGrid.SetVoxel(UPosition, Grid.GetVoxel(UPosition));
+        //const FUintVector3 UPosition((uint32)Position.X, (uint32)Position.Y, (uint32)Position.Z);
+        LargestGrid.SetVoxel(Position, Grid.GetVoxel(Position));
     }
 
     InitVoxel(CollisionType, LargestGrid, m_static);
@@ -148,7 +148,7 @@ void AVoxelConstruct::OnVoxelsChanged()
 
 void AVoxelConstruct::GenerateVoxelData()
 {
-    Grid.Initialize(VOXEL_GRID_SIZE);
+    Grid.Initialize(VOXEL_CHUNK_SIZE);
 
     const FVector center = FVector(static_cast<float>(Grid.GridSize) * 0.5f);
     
@@ -193,7 +193,7 @@ void AVoxelConstruct::GenerateVoxelData()
                     blockType = 3;  // Dirt
                 }
 
-                SetVoxel(FUintVector3(x, y, z), blockType);
+                Grid.SetVoxel(FIntVector3(x, y, z), blockType);
             }
         }
     }

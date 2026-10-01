@@ -12,33 +12,51 @@ struct DYNAMICVOXELS_API FVoxelGrid
 {
     GENERATED_BODY()
 
-    UPROPERTY()
     uint32 GridSize = 0;
 
-    UPROPERTY()
     TArray<uint8> Data;
+
+    TArray<uint64> XYPlaneBitData;
+    TArray<uint64> XZPlaneBitData;
+
+    uint32 BitGridSize = 0;
 
     void Initialize(uint32 InGridSize)
     {
+        if (InGridSize > 64) UE_LOG(LogTemp, Fatal, TEXT("Voxel Grid Size cannot be bigger than 64!"));
+
         GridSize = InGridSize;
+        BitGridSize = InGridSize + 2;
         Data.Init(0, GridSize * GridSize * GridSize);
+
+        XYPlaneBitData.Init(0, BitGridSize * BitGridSize);
+        XZPlaneBitData.Init(0, BitGridSize * BitGridSize);
     }
 
-    bool IsInsideGrid(const FUintVector3& Position) const
+    inline int GetBitPlaneIndex(int PosX, int PosY)
     {
-        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
-            return false;
+        return (PosY + 1) * BitGridSize + (PosX + 1);
+    }
+
+    inline void SetVoxelFromBitData(TArray<uint64>& BitData, const FIntVector3& Position, uint8 Value)
+    {
+        int Index = GetBitPlaneIndex(Position.X, Position.Y);
+        if (Value != 0)
+            BitData[Index] = BitData[Index] | (1ui64 << static_cast<uint64>(Position.Z));
         else
-            return true;
+            BitData[Index] = BitData[Index] & ~(1ui64 << static_cast<uint64>(Position.Z));
     }
 
-    uint8 GetVoxel(const FUintVector3& Position) const
+    inline uint8 GetVoxel(const FIntVector3& Position) const
     {
-        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
+        int PosMin = Position.GetMin();
+        int PosMax = Position.GetMax();
+
+        if (PosMax >= static_cast<int>(GridSize) || PosMin < 0)
         {
             UE_LOG(LogTemp,
                    Error,
-                   TEXT("FVoxelGrid: attempting to get invalid voxel position (%u,%u,%u) for GridSize %u"),
+                   TEXT("FVoxelGrid: attempting to get invalid voxel position (%i,%i,%i) for GridSize %u"),
                    Position.X,
                    Position.Y,
                    Position.Z,
@@ -47,51 +65,29 @@ struct DYNAMICVOXELS_API FVoxelGrid
         }
         return Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X];
     }
-    void SetVoxel(const FUintVector3& Position, uint8 Value)
+    inline void SetVoxel(const FIntVector3& Position, uint8 Value)
     {
-        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
-        {
-            UE_LOG(LogTemp,
-                   Error,
-                   TEXT("FVoxelGrid: attempting to set invalid voxel position (%u,%u,%u) for GridSize %u"),
-                   Position.X,
-                   Position.Y,
-                   Position.Z,
-                   GridSize);
-            return;
-        }
-        Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X] = Value;
-    }
+        int PosMin = Position.GetMin();
+        int PosMax = Position.GetMax();
 
-    static uint8 GetVoxelFromData(const TArray<uint8>& Data, uint32_t GridSize, const FUintVector3& Position)
-    {
-        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
+        if (PosMax > static_cast<int>(GridSize) || PosMin < -1)
         {
             UE_LOG(LogTemp,
                    Error,
-                   TEXT("FVoxelGrid: attempting to get invalid voxel position (%u,%u,%u) for GridSize %u"),
-                   Position.X,
-                   Position.Y,
-                   Position.Z,
-                   GridSize);
-            return 0;
-        }
-        return Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X];
-    }
-    static void SetVoxelFromData(TArray<uint8>& Data, uint32_t GridSize, const FUintVector3& Position, uint8 Value)
-    {
-        if (Position.X >= GridSize || Position.Y >= GridSize || Position.Z >= GridSize)
-        {
-            UE_LOG(LogTemp,
-                   Error,
-                   TEXT("FVoxelGrid: attempting to set invalid voxel position (%u,%u,%u) for GridSize %u"),
+                   TEXT("FVoxelGrid: attempting to set invalid voxel position (%i,%i,%i) for GridSize %u"),
                    Position.X,
                    Position.Y,
                    Position.Z,
                    GridSize);
             return;
         }
-        Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X] = Value;
+
+        if (PosMax < static_cast<int>(GridSize) && PosMin >= 0)
+            Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X] = Value;
+
+        if (Position.Z >= 0 && Position.Z < static_cast<int>(GridSize)) SetVoxelFromBitData(XYPlaneBitData, Position, Value);
+        if (Position.Y >= 0 && Position.Y < static_cast<int>(GridSize))
+            SetVoxelFromBitData(XZPlaneBitData, FIntVector3(Position.X, Position.Z, Position.Y), Value);
     }
 
     bool IsFilled(int32 x, int32 y, int32 z) const

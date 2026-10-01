@@ -29,7 +29,6 @@ class DYNAMICVOXELS_API AVoxelBase : public AActor
 
 public:
     static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
-    static constexpr uint32 VOXEL_GRID_SIZE = VOXEL_CHUNK_SIZE + 2;
 
     AVoxelBase();
 
@@ -41,8 +40,8 @@ public:
 
     const FVoxelGrid& GetGrid() const { return Grid; }
 
-    uint8 GetVoxel(const FUintVector3& Position) const { return Grid.GetVoxel(Position); }
-    void SetVoxel(const FUintVector3& Position, uint8 Value) { Grid.SetVoxel(Position, Value); }
+    //uint8 GetVoxel(const FUintVector3& Position) const { return Grid.GetVoxel(Position); }
+    //void SetVoxel(const FUintVector3& Position, uint8 Value) { Grid.SetVoxel(Position, Value); }
     int32 GetGridSize() const { return static_cast<int32>(Grid.GridSize); }
 
     // defualt edit
@@ -76,16 +75,16 @@ protected:
 
 private:
 
-    void CreateMeshPlanesGreedy(EFaceDirection FaceDirection);
+    void CreateMeshPlaneGreedy1D(EFaceDirection FaceDirection);
+    void CreateMeshPlaneGreedy(EFaceDirection FaceDirection);
     inline void AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale);
 
-    TArray<FVector> m_vertices;
-    TArray<FVector> m_normals;
-    TArray<FVector2D> m_uvs;
-    TArray<int32> m_indices;
-    int32 m_indexCount = 0;
+    TArray<FVector> Vertices;
+    TArray<FVector> Normals;
+    TArray<int32> Indices;
+    int32 IndexCount = 0;
 
-    TArray<uint8> TempGridData;
+    TArray<uint64> TempPlaneBitData;
 
     bool m_materialDataCreated = false;
 };
