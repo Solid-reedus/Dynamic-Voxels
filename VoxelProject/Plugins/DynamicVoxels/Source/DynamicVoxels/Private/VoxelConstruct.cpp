@@ -11,9 +11,26 @@ void AVoxelConstruct::OnConstruction(const FTransform& Transform)
     CreateCollision();
 }
 
+void AVoxelConstruct::ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value)
+{
+    if (Positions.IsEmpty())
+    {
+        return;
+    }
+
+    for (const FUintVector3& Position : Positions)
+    {
+        Grid.SetVoxel(Position, Value);
+    }
+
+    RegenerateMesh();
+    CreateCollision();
+    OnVoxelsChanged();
+}
+
 void AVoxelConstruct::OnVoxelsChanged()
 {
-    const int32 N = (int32)Grid.GridSize;
+    const int32 N = static_cast<int32>(Grid.GridSize);
     if (N == 0)
     {
         return;
@@ -122,7 +139,7 @@ void AVoxelConstruct::OnVoxelsChanged()
     LargestGrid.Initialize(Grid.GridSize);
     for (const FIntVector& Position : Islands[LargestIndex])
     {
-        const FUintVector3 UPosition((uint32)Position.X, (uint32)Position.Y, (uint32)Position.Z);
+        const FUintVector3 UPosition(static_cast<uint32>(Position.X), static_cast<uint32>(Position.Y), static_cast<uint32>(Position.Z));
         LargestGrid.SetVoxel(UPosition, Grid.GetVoxel(UPosition));
     }
 

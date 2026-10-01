@@ -35,7 +35,6 @@ void AVoxelBase::ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Val
 
     RegenerateMesh();
     CreateCollision();
-    OnVoxelsChanged();
 }
 
 void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
@@ -112,8 +111,12 @@ void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray
         VoxelDataTexture->CompressionSettings = TextureCompressionSettings::TC_Grayscale;
         VoxelDataTexture->SRGB = 0;
         VoxelDataTexture->Filter = TextureFilter::TF_Nearest;
+#ifndef UE_BUILD_DEBUG
         VoxelDataTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
         VoxelDataTexture->CompressionNone = 1;
+#endif  // !UE_BUILD_DEBUG
+
+
 
         // Upload voxel data to texture
         void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);

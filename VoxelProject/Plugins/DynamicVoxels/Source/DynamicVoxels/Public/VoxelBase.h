@@ -45,8 +45,11 @@ public:
     void SetVoxel(const FUintVector3& Position, uint8 Value) { Grid.SetVoxel(Position, Value); }
     int32 GetGridSize() const { return static_cast<int32>(Grid.GridSize); }
 
-	//virtual void ApplyVoxelEdit(const TArray<FIntVector>& Positions, uint8 Value, uint32 Border = 0);
-    void ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value);
+    // defualt edit
+    virtual void ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value);
+
+
+
 
 protected:
     virtual void BeginPlay() override;
@@ -58,9 +61,6 @@ protected:
     // SHOULD be called after the mesh is generated, to create collision for the voxel
     void CreateCollision();
 
-    // custom override function that is called when the voxel data is changed, each class that inherits from this class should
-    // implement this function to handle the voxel data change
-    virtual void OnVoxelsChanged() PURE_VIRTUAL(AVoxelBase::OnVoxelsChanged, );
 
     UPROPERTY()
     FVoxelGrid Grid;

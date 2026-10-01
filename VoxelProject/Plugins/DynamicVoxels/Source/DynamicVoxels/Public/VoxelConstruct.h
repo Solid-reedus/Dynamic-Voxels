@@ -23,11 +23,14 @@ protected:
 
     virtual void OnConstruction(const FTransform& Transform) override;
 
-    // TODO, implement a proper OnVoxelsChanged for the construct
-    virtual void OnVoxelsChanged() override;
+
+    virtual void ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value) override;   
 
 private:
 
+    //
+    void OnVoxelsChanged();
+    
     // IMPORTANT this is testing code, it will generate a random voxel grid for the constructs
     void GenerateVoxelData();
 
