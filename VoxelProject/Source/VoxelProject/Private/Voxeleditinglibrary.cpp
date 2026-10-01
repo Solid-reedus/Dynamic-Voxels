@@ -1,65 +1,19 @@
-
 #include "VoxelEditingLibrary.h"
 #include "VoxelBase.h"
-#include "VoxelGrid.h"
 
 void UVoxeleditinglibrary::RemoveVoxelsInSphere(AVoxelBase* Target, const FVector& WorldLocation, float Radius)
 {
-    if (!Target)
-    {
-        return;
-    }
-
-    const FVoxelGrid& Grid = Target->GetGrid();
-    if (Grid.GridSize == 0 || Target->VoxelSize == 0)
-    {
-        return;
-    }
-
-    const FVector LocalLocation = Target->GetActorTransform().InverseTransformPosition(WorldLocation);
-    const FVector GridSpaceLocation = LocalLocation / static_cast<float>(Target->VoxelSize);
-    const float RadiusInVoxels = Radius / static_cast<float>(Target->VoxelSize);
-
-    const int32 N = static_cast<int32>(Grid.GridSize);
-    const int32 MinX = FMath::Clamp(FMath::FloorToInt(GridSpaceLocation.X - RadiusInVoxels), 0, N - 1);
-    const int32 MaxX = FMath::Clamp(FMath::CeilToInt(GridSpaceLocation.X + RadiusInVoxels), 0, N - 1);
-    const int32 MinY = FMath::Clamp(FMath::FloorToInt(GridSpaceLocation.Y - RadiusInVoxels), 0, N - 1);
-    const int32 MaxY = FMath::Clamp(FMath::CeilToInt(GridSpaceLocation.Y + RadiusInVoxels), 0, N - 1);
-    const int32 MinZ = FMath::Clamp(FMath::FloorToInt(GridSpaceLocation.Z - RadiusInVoxels), 0, N - 1);
-    const int32 MaxZ = FMath::Clamp(FMath::CeilToInt(GridSpaceLocation.Z + RadiusInVoxels), 0, N - 1);
-
-    const float RadiusSq = RadiusInVoxels * RadiusInVoxels;
-
-    TArray<FUintVector3> Positions;
-    for (int32 z = MinZ; z <= MaxZ; ++z)
-    {
-        for (int32 y = MinY; y <= MaxY; ++y)
-        {
-            for (int32 x = MinX; x <= MaxX; ++x)
-            {
-                const FVector VoxelCenter = FVector(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)) + 0.5f;
-                if (FVector::DistSquared(VoxelCenter, GridSpaceLocation) <= RadiusSq)
-                {
-                    Positions.Add(FUintVector3((uint32)x, (uint32)y, (uint32)z));
-                }
-            }
-        }
-    }
-
-    UE_LOG(LogTemp, Log, TEXT("amount of voxels changed %d"), Positions.Num());
-
-    Target->ApplyVoxelEdit(Positions, 0);
+    ApplySphereEdit(Target, WorldLocation, Radius, 0);
 }
 
 void UVoxeleditinglibrary::AddVoxelsInSphere(AVoxelBase* Target, const FVector& WorldLocation, float Radius, uint8 BlockType)
 {
-    if (!Target)
-    {
-        return;
-    }
+    ApplySphereEdit(Target, WorldLocation, Radius, BlockType);
+}
 
-    const FVoxelGrid& Grid = Target->GetGrid();
-    if (Grid.GridSize == 0 || Target->VoxelSize == 0)
+void UVoxeleditinglibrary::ApplySphereEdit(AVoxelBase* Target, const FVector& WorldLocation, float Radius, uint8 Value)
+{
+    if (!Target || Target->VoxelSize == 0)
     {
         return;
     }
@@ -68,33 +22,66 @@ void UVoxeleditinglibrary::AddVoxelsInSphere(AVoxelBase* Target, const FVector& 
     const FVector GridSpaceLocation = LocalLocation / static_cast<float>(Target->VoxelSize);
     const float RadiusInVoxels = Radius / static_cast<float>(Target->VoxelSize);
 
-    const int32 N = static_cast<int32>(Grid.GridSize);
-    const int32 MinX = FMath::Clamp(FMath::FloorToInt(GridSpaceLocation.X - RadiusInVoxels), 0, N - 1);
-    const int32 MaxX = FMath::Clamp(FMath::CeilToInt(GridSpaceLocation.X + RadiusInVoxels), 0, N - 1);
-    const int32 MinY = FMath::Clamp(FMath::FloorToInt(GridSpaceLocation.Y - RadiusInVoxels), 0, N - 1);
-    const int32 MaxY = FMath::Clamp(FMath::CeilToInt(GridSpaceLocation.Y + RadiusInVoxels), 0, N - 1);
-    const int32 MinZ = FMath::Clamp(FMath::FloorToInt(GridSpaceLocation.Z - RadiusInVoxels), 0, N - 1);
-    const int32 MaxZ = FMath::Clamp(FMath::CeilToInt(GridSpaceLocation.Z + RadiusInVoxels), 0, N - 1);
+    // Not clamped to any grid size - there's no single GridSize left to
+    // clamp against (AVoxelBase dropped GetGrid()/GetGridSize() entirely).
+    // Every voxel position maps to SOME 32-voxel sub-region below; if that
+    // sub-region doesn't exist yet on the target, ApplyVoxelEdit creates it
+    // (AVoxelConstruct) or it's forwarded to wherever actually owns it
+    // (AVoxelChunk, once that side is implemented) - either way, nothing
+    // needs clamping away up front.
+    const int32 MinX = FMath::FloorToInt(GridSpaceLocation.X - RadiusInVoxels);
+    const int32 MaxX = FMath::CeilToInt(GridSpaceLocation.X + RadiusInVoxels);
+    const int32 MinY = FMath::FloorToInt(GridSpaceLocation.Y - RadiusInVoxels);
+    const int32 MaxY = FMath::CeilToInt(GridSpaceLocation.Y + RadiusInVoxels);
+    const int32 MinZ = FMath::FloorToInt(GridSpaceLocation.Z - RadiusInVoxels);
+    const int32 MaxZ = FMath::CeilToInt(GridSpaceLocation.Z + RadiusInVoxels);
 
     const float RadiusSq = RadiusInVoxels * RadiusInVoxels;
 
-    TArray<FUintVector3> Positions;
+    constexpr int32 SubRegionShift = 5;  // log2(32)
+    constexpr int32 SubRegionMask = 31;  // 32 - 1
+    constexpr int32 VoxelsPerSubRegion = 32 * 32 * 32;
+
+    TMap<FIntVector, TArray<uint8>> Edits;
+    int32 TouchedCount = 0;
+
     for (int32 z = MinZ; z <= MaxZ; ++z)
     {
         for (int32 y = MinY; y <= MaxY; ++y)
         {
             for (int32 x = MinX; x <= MaxX; ++x)
             {
-                const FVector VoxelCenter = FVector(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)) + 0.5f;
-                if (FVector::DistSquared(VoxelCenter, GridSpaceLocation) <= RadiusSq)
+                const FVector VoxelCenter = FVector((float)x, (float)y, (float)z) + 0.5f;
+                if (FVector::DistSquared(VoxelCenter, GridSpaceLocation) > RadiusSq)
                 {
-                    Positions.Add(FUintVector3((uint32)x, (uint32)y, (uint32)z));
+                    continue;
                 }
+
+                // Arithmetic right-shift and bitwise-and on signed ints give
+                // the mathematically correct sub-region coordinate and local
+                // position here even for negative x/y/z - 32 is a power of
+                // 2, and two's complement arithmetic shift is equivalent to
+                // floor division. A sphere reaching into negative local
+                // space (a construct that's grown that direction) lands in
+                // the right sub-region, not a wrapped-around wrong one.
+                const FIntVector SubRegion(x >> SubRegionShift, y >> SubRegionShift, z >> SubRegionShift);
+                const int32 LocalX = x & SubRegionMask;
+                const int32 LocalY = y & SubRegionMask;
+                const int32 LocalZ = z & SubRegionMask;
+                const int32 BitIndex = (LocalZ * 32 + LocalY) * 32 + LocalX;
+
+                TArray<uint8>& Mask = Edits.FindOrAdd(SubRegion);
+                if (Mask.Num() == 0)
+                {
+                    Mask.Init(0, VoxelsPerSubRegion);
+                }
+                Mask[BitIndex] = 1;
+                ++TouchedCount;
             }
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("amount of voxels added %d"), Positions.Num());
+    UE_LOG(LogTemp, Log, TEXT("amount of voxels changed %d across %d sub-region(s)"), TouchedCount, Edits.Num());
 
-    Target->ApplyVoxelEdit(Positions, BlockType);
+    Target->ApplyVoxelEdit(Edits, Value);
 }

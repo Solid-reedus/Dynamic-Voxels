@@ -33,7 +33,7 @@ struct DYNAMICVOXELS_API FVoxelGrid
         XZPlaneBitData.Init(0, BitGridSize * BitGridSize);
     }
 
-    inline int GetBitPlaneIndex(int PosX, int PosY)
+    inline int GetBitPlaneIndex(int PosX, int PosY) const
     {
         return (PosY + 1) * BitGridSize + (PosX + 1);
     }

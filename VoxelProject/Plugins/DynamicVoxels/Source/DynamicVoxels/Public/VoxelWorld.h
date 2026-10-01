@@ -40,11 +40,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Voxel World")
     AVoxelChunk* GetChunkAt(const FIntVector& ChunkPosition) const;
 
-    void ForwardVoxelEdit(const FIntVector& ChunkPosition, const TArray<FUintVector3>& LocalPositions, uint8 Value);
-
-    UFUNCTION(BlueprintCallable, Category = "Voxel World")
-    void ApplyVoxelEditAtLocation(const FVector& WorldLocation, float Radius, uint8 Value);
-
 
 protected:
     // Called when the game starts or when spawned

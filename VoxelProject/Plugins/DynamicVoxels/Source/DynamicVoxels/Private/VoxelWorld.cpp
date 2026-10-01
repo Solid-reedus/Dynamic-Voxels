@@ -21,65 +21,6 @@ AVoxelChunk* AVoxelWorld::GetChunkAt(const FIntVector& ChunkPosition) const
 }
 
 
-void AVoxelWorld::ForwardVoxelEdit(const FIntVector& ChunkPosition, const TArray<FUintVector3>& LocalPositions, uint8 Value)
-{
-    AVoxelChunk* Chunk = GetChunkAt(ChunkPosition);
-    if (Chunk)
-    {
-        Chunk->ApplyVoxelEdit(LocalPositions, Value);
-    }
-    // Not currently loaded - nothing to apply to yet.
-}
-
-void AVoxelWorld::ApplyVoxelEditAtLocation(const FVector& WorldLocation, float Radius, uint8 Value)
-{
-    const float RadiusInVoxels = Radius / (float)VoxelSize;
-    const FVector CenterInVoxels = WorldLocation / (float)VoxelSize;
-
-    const int32 MinX = FMath::FloorToInt(CenterInVoxels.X - RadiusInVoxels);
-    const int32 MaxX = FMath::CeilToInt(CenterInVoxels.X + RadiusInVoxels);
-    const int32 MinY = FMath::FloorToInt(CenterInVoxels.Y - RadiusInVoxels);
-    const int32 MaxY = FMath::CeilToInt(CenterInVoxels.Y + RadiusInVoxels);
-    const int32 MinZ = FMath::FloorToInt(CenterInVoxels.Z - RadiusInVoxels);
-    const int32 MaxZ = FMath::CeilToInt(CenterInVoxels.Z + RadiusInVoxels);
-
-    const float RadiusSq = RadiusInVoxels * RadiusInVoxels;
-    const int32 ChunkSize = (int32)AVoxelChunk::VOXEL_CHUNK_SIZE;
-
-    TMap<FIntVector, TArray<FUintVector3>> ChunkEdits;
-
-    for (int32 z = MinZ; z <= MaxZ; ++z)
-    {
-        for (int32 y = MinY; y <= MaxY; ++y)
-        {
-            for (int32 x = MinX; x <= MaxX; ++x)
-            {
-                const FVector VoxelCenter((float)x + 0.5f, (float)y + 0.5f, (float)z + 0.5f);
-                if (FVector::DistSquared(VoxelCenter, CenterInVoxels) > RadiusSq)
-                {
-                    continue;
-                }
-
-                const int32 ChunkX = FMath::DivideAndRoundDown(x - 1, ChunkSize);
-                const int32 ChunkY = FMath::DivideAndRoundDown(y - 1, ChunkSize);
-                const int32 ChunkZ = FMath::DivideAndRoundDown(z - 1, ChunkSize);
-                const FIntVector ChunkPos(ChunkX, ChunkY, ChunkZ);
-
-                const FUintVector3 LocalPos((uint32)(x - ChunkX * ChunkSize),
-                                            (uint32)(y - ChunkY * ChunkSize),
-                                            (uint32)(z - ChunkZ * ChunkSize));
-
-                ChunkEdits.FindOrAdd(ChunkPos).Add(LocalPos);
-            }
-        }
-    }
-
-    for (const TPair<FIntVector, TArray<FUintVector3>>& Entry : ChunkEdits)
-    {
-        ForwardVoxelEdit(Entry.Key, Entry.Value, Value);
-    }
-}
-
 
 // Called when the game starts or when spawned
 void AVoxelWorld::BeginPlay()
