@@ -298,7 +298,7 @@ void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
                     // Creates n 1-bits at least significant bits, where n = Leading1s
                     uint64 CheckMask = ((1ui64 << Leading1s) - 1);
 
-                    for (uint32 i = 1; i < VOXEL_CHUNK_SIZE; ++i)
+                    for (uint32 i = 1; i <= VOXEL_CHUNK_SIZE; ++i)
                     {
                         FIntVector2 LoopPos;
                         switch (FaceDirection)
