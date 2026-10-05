@@ -21,6 +21,20 @@ AVoxelChunk* AVoxelWorld::GetChunkAt(const FIntVector& ChunkPosition) const
 }
 
 
+void AVoxelWorld::ApplyVoxelEdit(const FIntVector chunkPos, const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value)
+{
+    for (const TPair<FIntVector, TArray<uint8>>& Entry : Edits)
+    {
+        const FIntVector TargetChunkPos = chunkPos + Entry.Key;
+
+        AVoxelChunk* TargetChunk = GetChunkAt(TargetChunkPos);
+        if (TargetChunk)
+        {
+            TargetChunk->ApplyVoxelEditLocal(Entry.Value, Value);
+        }
+    }
+}
+
 
 // Called when the game starts or when spawned
 void AVoxelWorld::BeginPlay()
@@ -151,7 +165,7 @@ void AVoxelWorld::CreateNewChunk(const FIntVector3& chunkPosition)
     FActorSpawnParameters spawnInfo = {};
 
     AVoxelChunk* voxelChunk = GetWorld()->SpawnActor<AVoxelChunk>(location, rotation, spawnInfo);
-    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures, this);
+    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures, this, chunkPosition);
 
     m_voxelChunkInstances.Add(chunkPosition, voxelChunk);
 }

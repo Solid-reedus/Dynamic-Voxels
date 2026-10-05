@@ -38,22 +38,7 @@ public:
     UPROPERTY(VisibleAnywhere, Category = "Voxel")
     uint32 VoxelSize = 100;
 
-    // No GetGrid()/GetGridSize() anymore - there's no single Grid on this
-    // class to return. AVoxelChunk has its own Grid member (always exactly
-    // one, fixed 32-size); AVoxelConstruct has its own hashmap of sub-grids.
-    // Anything that needs a size/position (VoxelEditingLibrary's sphere
-    // math, for instance) needs reworking against whichever of those two
-    // shapes it's actually targeting - deferred, not done here yet.
-
-    // Pure virtual - AVoxelBase has no voxel storage of its own anymore, so
-    // it has nothing to apply an edit to. Edits is a hashmap of edit masks:
-    // key is a sub-grid coordinate (which 32-voxel cube this mask targets -
-    // for a chunk, a world chunk coordinate; for a construct, one of its own
-    // sub-grid keys), value is a 32*32*32-entry mask where a nonzero byte
-    // means "set this local voxel to Value". Value is one shared value for
-    // the whole call, same as before - the mask says WHERE, Value says WHAT.
     virtual void ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value) {}
-    //virtual void ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value) = 0;
 
 protected:
     virtual void BeginPlay() override;

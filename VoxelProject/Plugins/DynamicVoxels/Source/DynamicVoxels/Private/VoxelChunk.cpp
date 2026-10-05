@@ -11,10 +11,15 @@ TArray<AVoxelBase::FVoxelGridInstance> AVoxelChunk::BuildGridInstances() const
     return {FVoxelGridInstance{FIntVector::ZeroValue, &Grid}};
 }
 
-void AVoxelChunk::InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures, AVoxelWorld* world)
+void AVoxelChunk::InitializeChunk(uint32 voxelSize,
+                                  UMaterial* baseMaterial,
+                                  UTexture2DArray* voxelTextures,
+                                  AVoxelWorld* world,
+                                  FIntVector chunkPos)
 {
     VoxelSize = voxelSize;
     m_world = world;
+    m_chunkPos = chunkPos;
 
     GenerateVoxelData(voxelSize);
     if (!IsChunkUniform())
@@ -32,14 +37,40 @@ void AVoxelChunk::BeginPlay() { Super::BeginPlay(); }
 
 void AVoxelChunk::ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value)
 {
-    // Not yet implemented - the neighbor-forwarding logic (finding which
-    // chunk each mask entry actually belongs to, applying local entries
-    // directly, forwarding the rest through m_world) needs rebuilding
-    // around this mask format and isn't locked down yet. Left empty on
-    // purpose per explicit request, just to keep this compiling against
-    // AVoxelBase's pure virtual signature.
-    (void)Edits;
-    (void)Value;
+    m_world->ApplyVoxelEdit(m_chunkPos, Edits, Value);
+}
+
+void AVoxelChunk::ApplyVoxelEditLocal(const TArray<uint8>& Mask, uint8 Value) 
+{
+    constexpr int32 VoxelsPerChunk = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
+    if (Mask.Num() != VoxelsPerChunk)
+    {
+        UE_LOG(LogTemp,
+               Warning,
+               TEXT("%s: edit mask has %d entries, expected %d - skipping"),
+               *GetName(),
+               Mask.Num(),
+               VoxelsPerChunk);
+        return;
+    }
+
+    for (int32 BitIndex = 0; BitIndex < VoxelsPerChunk; ++BitIndex)
+    {
+        if (Mask[BitIndex] == 0)
+        {
+            continue;
+        }
+
+        const int32 LocalX = BitIndex % VOXEL_CHUNK_SIZE;
+        const int32 LocalY = (BitIndex / VOXEL_CHUNK_SIZE) % VOXEL_CHUNK_SIZE;
+        const int32 LocalZ = BitIndex / (VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
+
+        Grid.SetVoxel(FIntVector3(LocalX, LocalY, LocalZ), Value);
+    }
+
+    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
+    RegenerateMesh(GridInstances);
+    CreateCollision(GridInstances);
 }
 
 void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)

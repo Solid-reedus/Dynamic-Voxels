@@ -22,13 +22,6 @@ void UVoxeleditinglibrary::ApplySphereEdit(AVoxelBase* Target, const FVector& Wo
     const FVector GridSpaceLocation = LocalLocation / static_cast<float>(Target->VoxelSize);
     const float RadiusInVoxels = Radius / static_cast<float>(Target->VoxelSize);
 
-    // Not clamped to any grid size - there's no single GridSize left to
-    // clamp against (AVoxelBase dropped GetGrid()/GetGridSize() entirely).
-    // Every voxel position maps to SOME 32-voxel sub-region below; if that
-    // sub-region doesn't exist yet on the target, ApplyVoxelEdit creates it
-    // (AVoxelConstruct) or it's forwarded to wherever actually owns it
-    // (AVoxelChunk, once that side is implemented) - either way, nothing
-    // needs clamping away up front.
     const int32 MinX = FMath::FloorToInt(GridSpaceLocation.X - RadiusInVoxels);
     const int32 MaxX = FMath::CeilToInt(GridSpaceLocation.X + RadiusInVoxels);
     const int32 MinY = FMath::FloorToInt(GridSpaceLocation.Y - RadiusInVoxels);
@@ -57,13 +50,6 @@ void UVoxeleditinglibrary::ApplySphereEdit(AVoxelBase* Target, const FVector& Wo
                     continue;
                 }
 
-                // Arithmetic right-shift and bitwise-and on signed ints give
-                // the mathematically correct sub-region coordinate and local
-                // position here even for negative x/y/z - 32 is a power of
-                // 2, and two's complement arithmetic shift is equivalent to
-                // floor division. A sphere reaching into negative local
-                // space (a construct that's grown that direction) lands in
-                // the right sub-region, not a wrapped-around wrong one.
                 const FIntVector SubRegion(x >> SubRegionShift, y >> SubRegionShift, z >> SubRegionShift);
                 const int32 LocalX = x & SubRegionMask;
                 const int32 LocalY = y & SubRegionMask;
