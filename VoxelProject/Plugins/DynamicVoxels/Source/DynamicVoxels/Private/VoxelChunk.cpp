@@ -1,34 +1,85 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "VoxelChunk.h"
+#include "VoxelWorld.h"
 
 #define SUPERFLAT_WORLDGEN 0
 
 // Sets default values
 AVoxelChunk::AVoxelChunk() { PrimaryActorTick.bCanEverTick = false; }
 
-void AVoxelChunk::InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
+TArray<AVoxelBase::FVoxelGridInstance> AVoxelChunk::BuildGridInstances() const
+{
+    return {FVoxelGridInstance{FIntVector::ZeroValue, &Grid}};
+}
+
+void AVoxelChunk::InitializeChunk(uint32 voxelSize,
+                                  UMaterial* baseMaterial,
+                                  UTexture2DArray* voxelTextures,
+                                  AVoxelWorld* world,
+                                  FIntVector chunkPos)
 {
     VoxelSize = voxelSize;
+    m_world = world;
+    m_chunkPos = chunkPos;
 
     GenerateVoxelData(voxelSize);
     if (!IsChunkUniform())
     {
-        RegenerateMesh();
-        CreateCollision();
-        CreateMaterialInstance(baseMaterial, voxelTextures);
+        CreateMaterialInstance(Grid, baseMaterial, voxelTextures);
+
+        const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
+        RegenerateMesh(GridInstances);
+        CreateCollision(GridInstances);
     }
 }
 
 // Called when the game starts or when spawned
 void AVoxelChunk::BeginPlay() { Super::BeginPlay(); }
 
+void AVoxelChunk::ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value)
+{
+    m_world->ApplyVoxelEdit(m_chunkPos, Edits, Value);
+}
+
+void AVoxelChunk::ApplyVoxelEditLocal(const TArray<uint8>& Mask, uint8 Value) 
+{
+    constexpr int32 VoxelsPerChunk = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
+    if (Mask.Num() != VoxelsPerChunk)
+    {
+        UE_LOG(LogTemp,
+               Warning,
+               TEXT("%s: edit mask has %d entries, expected %d - skipping"),
+               *GetName(),
+               Mask.Num(),
+               VoxelsPerChunk);
+        return;
+    }
+
+    for (int32 BitIndex = 0; BitIndex < VoxelsPerChunk; ++BitIndex)
+    {
+        if (Mask[BitIndex] == 0)
+        {
+            continue;
+        }
+
+        const int32 LocalX = BitIndex % VOXEL_CHUNK_SIZE;
+        const int32 LocalY = (BitIndex / VOXEL_CHUNK_SIZE) % VOXEL_CHUNK_SIZE;
+        const int32 LocalZ = BitIndex / (VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE);
+
+        Grid.SetVoxel(FIntVector3(LocalX, LocalY, LocalZ), Value);
+    }
+
+    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
+    RegenerateMesh(GridInstances);
+    CreateCollision(GridInstances);
+}
+
 void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
 {
     FVector actorPosition = GetActorLocation();
     FIntVector3 relativePosition = FIntVector3(static_cast<int32>(actorPosition.X),
                                                static_cast<int32>(actorPosition.Y),
-                                               static_cast<int32>(actorPosition.Z)) / voxelSize;
+                                               static_cast<int32>(actorPosition.Z)) /
+                                   voxelSize;
 
     m_chunkPosition = relativePosition / VOXEL_CHUNK_SIZE;
 

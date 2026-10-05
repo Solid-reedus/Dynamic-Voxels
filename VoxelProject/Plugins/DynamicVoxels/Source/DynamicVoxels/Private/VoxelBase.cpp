@@ -1,4 +1,3 @@
-
 #include "VoxelBase.h"
 #include "VoxelCollisionDecomposition.h"
 #include "PhysicsEngine/BodySetup.h"
@@ -26,64 +25,73 @@ AVoxelBase::AVoxelBase()
     ProceduralMesh->SetSimulatePhysics(false);
 }
 
-void AVoxelBase::ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value)
-{
-    if (Positions.IsEmpty())
-    {
-        return;
-    }
-
-    for (const FUintVector3& Position : Positions)
-    {
-        Grid.SetVoxel(FIntVector3(Position), Value);
-    }
-
-    RegenerateMesh();
-    CreateCollision();
-    OnVoxelsChanged();
-}
-
 void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
 
-void AVoxelBase::RegenerateMesh()
+void AVoxelBase::RegenerateMesh(const TArray<FVoxelGridInstance>& Grids)
 {
-    if (Grid.Data.IsEmpty()) return;
+    // IMPORTANT, NOT YET SOLVED: face-culling (every GetVoxel/bit-plane
+    // "front" lookup below) only ever checks the SAME grid instance's own
+    // data. A voxel sitting at the edge of one sub-grid has no way to see
+    // whether the ADJACENT sub-grid has solid content right next to it, so
+    // a face always gets generated at every sub-grid boundary - including
+    // where two solid sub-grids actually touch with nothing between them.
+    // For a construct that's still a single sub-grid (the current actual
+    // state) this never shows up. The moment ApplyVoxelEdit grows a second
+    // sub-grid, this becomes a visible seam/z-fight at the boundary. Same
+    // category of problem as AVoxelChunk's neighbor-padding, genuinely
+    // separate work, not something to solve inside this pass.
 
 #if MESHING_METHOD == 0
-    for (int z = 0; z < VOXEL_CHUNK_SIZE; ++z)
+    for (const FVoxelGridInstance& GridInstance : Grids)
     {
-        for (int y = 0; y < VOXEL_CHUNK_SIZE; ++y)
+        if (!GridInstance.Grid) continue;
+        const FVoxelGrid& Grid = *GridInstance.Grid;
+
+        for (int z = 0; z < VOXEL_CHUNK_SIZE; ++z)
         {
-            for (int x = 0; x < VOXEL_CHUNK_SIZE; ++x)
+            for (int y = 0; y < VOXEL_CHUNK_SIZE; ++y)
             {
-                if (Grid.GetVoxel(FUintVector3(x, y, z)) == 0) continue;
+                for (int x = 0; x < VOXEL_CHUNK_SIZE; ++x)
+                {
+                    if (Grid.GetVoxel(FIntVector3(x, y, z)) == 0) continue;
 
-                FVector VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
-                FVector2D FaceScale = FVector2D(VoxelSize, VoxelSize);
+                    FVector VoxelPos = FVector((x + GridInstance.Offset.X) * VoxelSize,
+                                               (y + GridInstance.Offset.Y) * VoxelSize,
+                                               (z + GridInstance.Offset.Z) * VoxelSize);
+                    FVector2D FaceScale = FVector2D(VoxelSize, VoxelSize);
 
-                if (Grid.GetVoxel(FUintVector3(x + 1, y, z)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_X, FaceScale);
-                if (Grid.GetVoxel(FUintVector3(x - 1, y, z)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_X, FaceScale);
-                if (Grid.GetVoxel(FUintVector3(x, y + 1, z)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_Y, FaceScale);
-                if (Grid.GetVoxel(FUintVector3(x, y - 1, z)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Y, FaceScale);
-                if (Grid.GetVoxel(FUintVector3(x, y, z + 1)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_Z, FaceScale);
-                if (Grid.GetVoxel(FUintVector3(x, y, z - 1)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, FaceScale);
+                    if (Grid.GetVoxel(FIntVector3(x + 1, y, z)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_X, FaceScale);
+                    if (Grid.GetVoxel(FIntVector3(x - 1, y, z)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_X, FaceScale);
+                    if (Grid.GetVoxel(FIntVector3(x, y + 1, z)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_Y, FaceScale);
+                    if (Grid.GetVoxel(FIntVector3(x, y - 1, z)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Y, FaceScale);
+                    if (Grid.GetVoxel(FIntVector3(x, y, z + 1)) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_Z, FaceScale);
+                    if (Grid.GetVoxel(FIntVector3(x, y, z - 1)) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, FaceScale);
+                }
             }
         }
     }
 #elif MESHING_METHOD == 1
-    CreateMeshPlaneGreedy1D(EFaceDirection::POSITIVE_X);
-    CreateMeshPlaneGreedy1D(EFaceDirection::NEGATIVE_X);
-    CreateMeshPlaneGreedy1D(EFaceDirection::POSITIVE_Y);
-    CreateMeshPlaneGreedy1D(EFaceDirection::NEGATIVE_Y);
-    CreateMeshPlaneGreedy1D(EFaceDirection::POSITIVE_Z);
-    CreateMeshPlaneGreedy1D(EFaceDirection::NEGATIVE_Z);
+    for (const FVoxelGridInstance& GridInstance : Grids)
+    {
+        if (!GridInstance.Grid) continue;
+        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::POSITIVE_X);
+        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::NEGATIVE_X);
+        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::POSITIVE_Y);
+        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::NEGATIVE_Y);
+        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::POSITIVE_Z);
+        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::NEGATIVE_Z);
+    }
 #elif MESHING_METHOD == 2
-    CreateMeshPlaneGreedy(EFaceDirection::POSITIVE_X);
-    CreateMeshPlaneGreedy(EFaceDirection::NEGATIVE_X);
-    CreateMeshPlaneGreedy(EFaceDirection::POSITIVE_Y);
-    CreateMeshPlaneGreedy(EFaceDirection::NEGATIVE_Y);
-    CreateMeshPlaneGreedy(EFaceDirection::POSITIVE_Z);
-    CreateMeshPlaneGreedy(EFaceDirection::NEGATIVE_Z);
+    for (const FVoxelGridInstance& GridInstance : Grids)
+    {
+        if (!GridInstance.Grid) continue;
+        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::POSITIVE_X);
+        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::NEGATIVE_X);
+        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::POSITIVE_Y);
+        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::NEGATIVE_Y);
+        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::POSITIVE_Z);
+        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::NEGATIVE_Z);
+    }
 #endif
 
     if (ProceduralMesh)
@@ -109,24 +117,26 @@ void AVoxelBase::RegenerateMesh()
     IndexCount = 0;
 }
 
-void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
+void AVoxelBase::CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
 {
     // Create material and texture if they don't exist yet
     if (baseMaterial && voxelTextures && m_materialDataCreated == false)
     {
         // Create texture to store voxel data
-        uint32 textureHeight = Grid.Data.Num() / Grid.GridSize;
+        uint32 textureHeight = VoxelGrid.Data.Num() / VoxelGrid.GridSize;
 
-        VoxelDataTexture = UTexture2D::CreateTransient(Grid.GridSize, textureHeight, PF_R8);
+        VoxelDataTexture = UTexture2D::CreateTransient(VoxelGrid.GridSize, textureHeight, PF_R8);
         VoxelDataTexture->CompressionSettings = TextureCompressionSettings::TC_Grayscale;
         VoxelDataTexture->SRGB = 0;
         VoxelDataTexture->Filter = TextureFilter::TF_Nearest;
+#ifndef UE_BUILD_DEBUG
         VoxelDataTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
         VoxelDataTexture->CompressionNone = 1;
+#endif  // !UE_BUILD_DEBUG
 
         // Upload voxel data to texture
         void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-        FMemory::Memcpy(TargetTextureData, Grid.Data.GetData(), Grid.Data.Num());
+        FMemory::Memcpy(TargetTextureData, VoxelGrid.Data.GetData(), VoxelGrid.Data.Num());
 
         VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
         VoxelDataTexture->UpdateResource();
@@ -137,7 +147,7 @@ void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray
         MaterialInstance->SetTextureParameterValue(TEXT("VoxelDataTexture"), VoxelDataTexture);
 
         MaterialInstance->SetScalarParameterValue(TEXT("VoxelSize"), static_cast<float>(VoxelSize));
-        MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(Grid.GridSize));
+        MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(VoxelGrid.GridSize));
 
         ProceduralMesh->SetMaterial(0, MaterialInstance);
 
@@ -149,8 +159,10 @@ void AVoxelBase::CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray
     }
 }
 
-void AVoxelBase::CreateMeshPlaneGreedy1D(EFaceDirection FaceDirection)
+void AVoxelBase::CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection)
 {
+    const FVoxelGrid& Grid = *GridInstance.Grid;
+
     FIntVector2 Normal;
     bool UsingXZPlane = false;
 
@@ -210,11 +222,28 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(EFaceDirection FaceDirection)
                 {
                     uint32 Leading1s = FMath::CountTrailingZeros64(~Shifted);
 
+                    // XZ-plane: outer x = world X, outer y = world Z, the
+                    // bit-scan z = world Y - matches how FVoxelGrid::SetVoxel
+                    // itself rearranges (X,Y,Z) into (X,Z,Y) when writing
+                    // XZPlaneBitData. Offset components have to follow that
+                    // same rearrangement, not a straight X/Y/Z match.
+                    //
+                    // Every term cast to float BEFORE any addition - same
+                    // signed/unsigned mixing bug as CreateMeshPlaneGreedy (z
+                    // is uint32, Offset.Y/Z are signed int32; adding them
+                    // directly silently converts a negative offset to a huge
+                    // uint32 before the addition happens). Not currently
+                    // active (MESHING_METHOD == 2), but identical fix applied
+                    // so switching back to this method doesn't reintroduce it.
                     FVector VoxelPos;
                     if (UsingXZPlane)
-                        VoxelPos = FVector(x * VoxelSize, z * VoxelSize, y * VoxelSize);
+                        VoxelPos = FVector(((float)x + (float)GridInstance.Offset.X) * (float)VoxelSize,
+                                           ((float)z + (float)GridInstance.Offset.Y) * (float)VoxelSize,
+                                           ((float)y + (float)GridInstance.Offset.Z) * (float)VoxelSize);
                     else
-                        VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
+                        VoxelPos = FVector(((float)x + (float)GridInstance.Offset.X) * (float)VoxelSize,
+                                           ((float)y + (float)GridInstance.Offset.Y) * (float)VoxelSize,
+                                           ((float)z + (float)GridInstance.Offset.Z) * (float)VoxelSize);
 
                     FVector2D FaceScale = FVector2D(VoxelSize, Leading1s * VoxelSize);
                     AddFace(VoxelPos, FaceDirection, FaceScale);
@@ -226,8 +255,10 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(EFaceDirection FaceDirection)
     }
 }
 
-void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
+void AVoxelBase::CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection)
 {
+    const FVoxelGrid& Grid = *GridInstance.Grid;
+
     FIntVector2 Normal;
     bool UsingXZPlane = false;
 
@@ -260,8 +291,44 @@ void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
     const TArray<uint64>* OriginPlaneBitData = &Grid.XYPlaneBitData;
     if (UsingXZPlane) OriginPlaneBitData = &Grid.XZPlaneBitData;
 
+    // === DEBUG: Data-vs-bitplane integrity check =============================
+    // Runs once per grid instance (gated on POSITIVE_X, always the first of the
+    // six calls per instance) rather than once per direction, to avoid 6x
+    // duplicate output. Every solid voxel should contribute exactly one set
+    // bit to XYPlaneBitData (one bit per Z position per (x,y) column) - if
+    // these two counts don't match EXACTLY, Data and the bit-planes have gone
+    // out of sync for this specific grid instance. This is the direct test for
+    // "collision right, mesh wrong": collision reads Data, the mesher reads
+    // only the bit-planes.
+    if (FaceDirection == EFaceDirection::POSITIVE_X)
+    {
+        int32 DataNonZeroCount = 0;
+        for (uint8 Byte : Grid.Data)
+        {
+            if (Byte != 0) ++DataNonZeroCount;
+        }
+
+        int32 XYBitSetCount = 0;
+        for (uint64 Word : Grid.XYPlaneBitData)
+        {
+            XYBitSetCount += FMath::CountBits(Word);
+        }
+
+        int32 XZBitSetCount = 0;
+        for (uint64 Word : Grid.XZPlaneBitData)
+        {
+            XZBitSetCount += FMath::CountBits(Word);
+        }
+
+    }
+    // === END DEBUG =============================================================
+
     TempPlaneBitData.Init(0, Grid.BitGridSize * Grid.BitGridSize);
     memcpy(TempPlaneBitData.GetData(), OriginPlaneBitData->GetData(), Grid.BitGridSize * Grid.BitGridSize * sizeof(uint64));
+
+    // === DEBUG: per-call face counter ==========================================
+    int32 DebugFacesAddedThisCall = 0;
+    // === END DEBUG =============================================================
 
     for (int y = 0; y < VOXEL_CHUNK_SIZE; ++y)
     {
@@ -274,6 +341,15 @@ void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
             uint64 FrontColumn = (*OriginPlaneBitData)[FrontIndex];
 
             uint64 CanHaveFaceColumn = CurColumn & ~FrontColumn;
+
+            // === DEBUG: log any nonzero column before the early-out =============
+            // Only logs when CurColumn != 0, to avoid spamming for the (many)
+            // genuinely-empty columns. OriginalCurColumn lets you tell apart
+            // "this is the column's real, untouched data" from "this was
+            // already partially consumed by an earlier width-expansion pass
+            // in this same call" - TempPlaneBitData gets bits cleared as faces
+            // get consumed, so CurColumn alone can't tell you which case you're
+            // looking at.
 
             // No faces can be generated anywhere, so continue
             if (CanHaveFaceColumn == 0) continue;
@@ -344,14 +420,39 @@ void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
 
                     if (XScale > 0)
                     {
+                        // Same XZ-plane rearrangement as CreateMeshPlaneGreedy1D -
+                        // see the comment there for why the offset components
+                        // don't line up straight with x/y/z here.
+                        //
+                        // Every term cast to float BEFORE any addition - z is
+                        // uint32 (needed for the bit-scan math above), while
+                        // GridInstance.Offset.Y/Z are signed int32. Writing
+                        // "z + GridInstance.Offset.Z" directly lets C++'s usual
+                        // arithmetic conversions silently convert the signed
+                        // offset to unsigned first (same bit-width, signed
+                        // loses) - a negative offset becomes a huge uint32
+                        // (e.g. -32 becomes 4294967264) before the addition
+                        // ever happens, and multiplying that by VoxelSize
+                        // overflows uint32 again, producing an essentially
+                        // arbitrary position. Casting to float first means the
+                        // addition happens in floating-point space from the
+                        // start, where negative values behave normally.
                         FVector VoxelPos;
                         if (UsingXZPlane)
-                            VoxelPos = FVector(x * VoxelSize, z * VoxelSize, y * VoxelSize);
+                            VoxelPos = FVector(((float)x + (float)GridInstance.Offset.X) * (float)VoxelSize,
+                                               ((float)z + (float)GridInstance.Offset.Y) * (float)VoxelSize,
+                                               ((float)y + (float)GridInstance.Offset.Z) * (float)VoxelSize);
                         else
-                            VoxelPos = FVector(x * VoxelSize, y * VoxelSize, z * VoxelSize);
+                            VoxelPos = FVector(((float)x + (float)GridInstance.Offset.X) * (float)VoxelSize,
+                                               ((float)y + (float)GridInstance.Offset.Y) * (float)VoxelSize,
+                                               ((float)z + (float)GridInstance.Offset.Z) * (float)VoxelSize);
 
                         FVector2D FaceScale = FVector2D(XScale * VoxelSize, Leading1s * VoxelSize);
                         AddFace(VoxelPos, FaceDirection, FaceScale);
+
+                        // === DEBUG ===
+                        ++DebugFacesAddedThisCall;
+                        // === END DEBUG ===
                     }
 
                     z += Leading1s;
@@ -359,6 +460,7 @@ void AVoxelBase::CreateMeshPlaneGreedy(EFaceDirection FaceDirection)
             }
         }
     }
+
 
     TempPlaneBitData.Empty();
 }
@@ -439,26 +541,11 @@ void AVoxelBase::AddFace(const FVector& Position, EFaceDirection FaceDirection, 
     IndexCount += 4;
 }
 
-void AVoxelBase::CreateCollision()
+void AVoxelBase::CreateCollision(const TArray<FVoxelGridInstance>& Grids)
 {
-    if (!ProceduralMesh || Grid.Data.IsEmpty())
+    if (!ProceduralMesh || Grids.IsEmpty())
     {
         return;
-    }
-
-    if (CollisionType == EVoxelCollisionType::MaxIS || CollisionType == EVoxelCollisionType::IS1)
-    {
-        const float Density = DecompVoxel::EstimateConcaveEdgeDensity(Grid);
-        if (Density > 2.0f)
-        {
-            UE_LOG(LogTemp,
-                   Warning,
-                   TEXT("%s: %s collision decomposition has a high concave-edge density (%.2f, structured shapes are usually "
-                        "<1.0) - this will likely take several seconds or more. Consider 3GDM/BSP for this shape instead."),
-                   *GetName(),
-                   CollisionType == EVoxelCollisionType::MaxIS ? TEXT("MaxIS") : TEXT("IS(1)"),
-                   Density);
-        }
     }
 
     UBodySetup* BodySetup = ProceduralMesh->GetBodySetup();
@@ -470,79 +557,100 @@ void AVoxelBase::CreateCollision()
     BodySetup->AggGeom.BoxElems.Reset();
     BodySetup->AggGeom.ConvexElems.Reset();
 
-    if (CollisionType == EVoxelCollisionType::ConvexHull)
+    // Jumps from grid instance to grid instance, decomposing each
+    // independently (DecompVoxel operates on one FVoxelGrid at a time
+    // regardless of how many exist) and accumulating every result into the
+    // same shared BodySetup, offset by that instance's own position. The
+    // per-sub-grid hashmap lookup cost (a cache miss at worst, per the
+    // earlier discussion) is the accepted tradeoff for not needing one
+    // contiguous array at all.
+    for (const FVoxelGridInstance& GridInstance : Grids)
     {
-        TArray<FVector> HullPoints;
-        for (uint32 z = 0; z < VOXEL_CHUNK_SIZE; ++z)
-        {
-            for (uint32 y = 0; y < VOXEL_CHUNK_SIZE; ++y)
-            {
-                for (uint32 x = 0; x < VOXEL_CHUNK_SIZE; ++x)
-                {
-                    if (Grid.GetVoxel(FIntVector3(x, y, z)) == 0) continue;
-                    const bool bSurface =
-                        Grid.GetVoxel(FIntVector3(x - 1, y, z)) == 0 || Grid.GetVoxel(FIntVector3(x + 1, y, z)) == 0 ||
-                        Grid.GetVoxel(FIntVector3(x, y - 1, z)) == 0 || Grid.GetVoxel(FIntVector3(x, y + 1, z)) == 0 ||
-                        Grid.GetVoxel(FIntVector3(x, y, z - 1)) == 0 || Grid.GetVoxel(FIntVector3(x, y, z + 1)) == 0;
-                    if (!bSurface) continue;
+        if (!GridInstance.Grid) continue;
+        const FVoxelGrid& Grid = *GridInstance.Grid;
+        const FVector WorldOffset = FVector(GridInstance.Offset) * (float)VoxelSize;
 
-                    const FVector Min = FVector((float)x, (float)y, (float)z) * VoxelSize;
-                    const FVector Max = FVector((float)(x + 1), (float)(y + 1), (float)(z + 1)) * VoxelSize;
-                    HullPoints.Add(FVector(Min.X, Min.Y, Min.Z));
-                    HullPoints.Add(FVector(Max.X, Min.Y, Min.Z));
-                    HullPoints.Add(FVector(Min.X, Max.Y, Min.Z));
-                    HullPoints.Add(FVector(Max.X, Max.Y, Min.Z));
-                    HullPoints.Add(FVector(Min.X, Min.Y, Max.Z));
-                    HullPoints.Add(FVector(Max.X, Min.Y, Max.Z));
-                    HullPoints.Add(FVector(Min.X, Max.Y, Max.Z));
-                    HullPoints.Add(FVector(Max.X, Max.Y, Max.Z));
+        if (CollisionType == EVoxelCollisionType::MaxIS || CollisionType == EVoxelCollisionType::IS1)
+        {
+            const float Density = DecompVoxel::EstimateConcaveEdgeDensity(Grid);
+
+        }
+
+        if (CollisionType == EVoxelCollisionType::ConvexHull)
+        {
+            TArray<FVector> HullPoints;
+            for (uint32 z = 0; z < VOXEL_CHUNK_SIZE; ++z)
+            {
+                for (uint32 y = 0; y < VOXEL_CHUNK_SIZE; ++y)
+                {
+                    for (uint32 x = 0; x < VOXEL_CHUNK_SIZE; ++x)
+                    {
+                        if (Grid.GetVoxel(FIntVector3(x, y, z)) == 0) continue;
+                        const bool bSurface =
+                            Grid.GetVoxel(FIntVector3(x - 1, y, z)) == 0 || Grid.GetVoxel(FIntVector3(x + 1, y, z)) == 0 ||
+                            Grid.GetVoxel(FIntVector3(x, y - 1, z)) == 0 || Grid.GetVoxel(FIntVector3(x, y + 1, z)) == 0 ||
+                            Grid.GetVoxel(FIntVector3(x, y, z - 1)) == 0 || Grid.GetVoxel(FIntVector3(x, y, z + 1)) == 0;
+                        if (!bSurface) continue;
+
+                        const FVector Min = WorldOffset + FVector((float)x, (float)y, (float)z) * (float)VoxelSize;
+                        const FVector Max =
+                            WorldOffset + FVector((float)(x + 1), (float)(y + 1), (float)(z + 1)) * (float)VoxelSize;
+                        HullPoints.Add(FVector(Min.X, Min.Y, Min.Z));
+                        HullPoints.Add(FVector(Max.X, Min.Y, Min.Z));
+                        HullPoints.Add(FVector(Min.X, Max.Y, Min.Z));
+                        HullPoints.Add(FVector(Max.X, Max.Y, Min.Z));
+                        HullPoints.Add(FVector(Min.X, Min.Y, Max.Z));
+                        HullPoints.Add(FVector(Max.X, Min.Y, Max.Z));
+                        HullPoints.Add(FVector(Min.X, Max.Y, Max.Z));
+                        HullPoints.Add(FVector(Max.X, Max.Y, Max.Z));
+                    }
                 }
             }
+
+            FKConvexElem ConvexElem;
+            ConvexElem.VertexData = HullPoints;
+            ConvexElem.UpdateElemBox();
+            BodySetup->AggGeom.ConvexElems.Add(ConvexElem);
         }
-
-        FKConvexElem ConvexElem;
-        ConvexElem.VertexData = HullPoints;
-        ConvexElem.UpdateElemBox();
-        BodySetup->AggGeom.ConvexElems.Add(ConvexElem);
-    }
-    else
-    {
-        TArray<DecompVoxel::FVoxelBlock> Blocks;
-        switch (CollisionType)
+        else
         {
-            case EVoxelCollisionType::Octree:
-                Blocks = DecompVoxel::DecomposeOctree(Grid);
-                break;
-            case EVoxelCollisionType::BSP:
-                Blocks = DecompVoxel::DecomposeBSP(Grid);
-                break;
-            case EVoxelCollisionType::MaxIS:
-                Blocks = DecompVoxel::DecomposeMaxIS(Grid);
-                break;
-            case EVoxelCollisionType::IS1:
-                Blocks = DecompVoxel::DecomposeIS1(Grid);
-                break;
-            case EVoxelCollisionType::ThreeGDM:
-            default:
-                Blocks = DecompVoxel::Decompose3GDM(Grid);
-                break;
-        }
+            TArray<DecompVoxel::FVoxelBlock> Blocks;
+            switch (CollisionType)
+            {
+                case EVoxelCollisionType::Octree:
+                    Blocks = DecompVoxel::DecomposeOctree(Grid);
+                    break;
+                case EVoxelCollisionType::BSP:
+                    Blocks = DecompVoxel::DecomposeBSP(Grid);
+                    break;
+                case EVoxelCollisionType::MaxIS:
+                    Blocks = DecompVoxel::DecomposeMaxIS(Grid);
+                    break;
+                case EVoxelCollisionType::IS1:
+                    Blocks = DecompVoxel::DecomposeIS1(Grid);
+                    break;
+                case EVoxelCollisionType::ThreeGDM:
+                default:
+                    Blocks = DecompVoxel::Decompose3GDM(Grid);
+                    break;
+            }
 
-        BodySetup->AggGeom.BoxElems.Reserve(Blocks.Num());
-        for (const DecompVoxel::FVoxelBlock& Block : Blocks)
-        {
-            const FVector BlockMin = FVector(Block.X, Block.Y, Block.Z) * VoxelSize;
-            const FVector BlockSize = FVector(Block.SizeX, Block.SizeY, Block.SizeZ) * VoxelSize;
-            const FVector BlockCenter = BlockMin + BlockSize * 0.5f;
+            BodySetup->AggGeom.BoxElems.Reserve(BodySetup->AggGeom.BoxElems.Num() + Blocks.Num());
+            for (const DecompVoxel::FVoxelBlock& Block : Blocks)
+            {
+                const FVector BlockMin = WorldOffset + FVector(Block.X, Block.Y, Block.Z) * (float)VoxelSize;
+                const FVector BlockSize = FVector(Block.SizeX, Block.SizeY, Block.SizeZ) * (float)VoxelSize;
+                const FVector BlockCenter = BlockMin + BlockSize * 0.5f;
 
-            FKBoxElem BoxElem;
-            BoxElem.Center = BlockCenter;
-            BoxElem.Rotation = FRotator::ZeroRotator;
-            BoxElem.X = BlockSize.X;
-            BoxElem.Y = BlockSize.Y;
-            BoxElem.Z = BlockSize.Z;
+                FKBoxElem BoxElem;
+                BoxElem.Center = BlockCenter;
+                BoxElem.Rotation = FRotator::ZeroRotator;
+                BoxElem.X = BlockSize.X;
+                BoxElem.Y = BlockSize.Y;
+                BoxElem.Z = BlockSize.Z;
 
-            BodySetup->AggGeom.BoxElems.Add(BoxElem);
+                BodySetup->AggGeom.BoxElems.Add(BoxElem);
+            }
         }
     }
 

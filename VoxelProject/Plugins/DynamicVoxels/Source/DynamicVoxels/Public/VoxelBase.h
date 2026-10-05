@@ -19,7 +19,7 @@ enum class EFaceDirection
 };
 
 /*
-    base class for voxel-based actors, it has all basic functionality to manage 
+    base class for voxel-based actors, it has all basic functionality to manage
     a voxel, mesh of the voxel and collision
 */
 UCLASS(Abstract)
@@ -38,31 +38,24 @@ public:
     UPROPERTY(VisibleAnywhere, Category = "Voxel")
     uint32 VoxelSize = 100;
 
-    const FVoxelGrid& GetGrid() const { return Grid; }
-
-    //uint8 GetVoxel(const FUintVector3& Position) const { return Grid.GetVoxel(Position); }
-    //void SetVoxel(const FUintVector3& Position, uint8 Value) { Grid.SetVoxel(Position, Value); }
-    int32 GetGridSize() const { return static_cast<int32>(Grid.GridSize); }
-
-	//virtual void ApplyVoxelEdit(const TArray<FIntVector>& Positions, uint8 Value, uint32 Border = 0);
-    void ApplyVoxelEdit(const TArray<FUintVector3>& Positions, uint8 Value);
+    virtual void ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value) {}
 
 protected:
     virtual void BeginPlay() override;
 
-    // make a mesh out of a voxel grid
-    void RegenerateMesh();
-    void CreateMaterialInstance(UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
+    /*
+        a single voxel grid and its position, so one actor can be made up
+        of more than one grid instead of just one
+    */
+    struct FVoxelGridInstance
+    {
+        FIntVector Offset;
+        const FVoxelGrid* Grid = nullptr;
+    };
 
-    // SHOULD be called after the mesh is generated, to create collision for the voxel
-    void CreateCollision();
-
-    // custom override function that is called when the voxel data is changed, each class that inherits from this class should
-    // implement this function to handle the voxel data change
-    virtual void OnVoxelsChanged() PURE_VIRTUAL(AVoxelBase::OnVoxelsChanged, );
-
-    UPROPERTY()
-    FVoxelGrid Grid;
+    void RegenerateMesh(const TArray<FVoxelGridInstance>& Grids);
+    void CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
+    void CreateCollision(const TArray<FVoxelGridInstance>& Grids);
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voxel")
     UProceduralMeshComponent* ProceduralMesh = nullptr;
@@ -74,9 +67,8 @@ protected:
     UTexture2D* VoxelDataTexture = nullptr;
 
 private:
-
-    void CreateMeshPlaneGreedy1D(EFaceDirection FaceDirection);
-    void CreateMeshPlaneGreedy(EFaceDirection FaceDirection);
+    void CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection);
+    void CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection);
     inline void AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale);
 
     TArray<FVector> Vertices;

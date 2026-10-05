@@ -1,3 +1,4 @@
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -17,20 +18,25 @@ public:
     void InitVoxel(EVoxelCollisionType NewCollisionType, bool isStatic);
 
     // init voxel construct based on grid data
-    void InitVoxel(EVoxelCollisionType NewCollisionType, const FVoxelGrid& InGrid, bool isStatic);
+    void InitVoxel(EVoxelCollisionType NewCollisionType, const TMap<FIntVector, FVoxelGrid>& InSubGrids, bool isStatic);
 
-protected:
+    virtual void ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value) override;
 
+protected:  
     virtual void OnConstruction(const FTransform& Transform) override;
 
-    // TODO, implement a proper OnVoxelsChanged for the construct
-    virtual void OnVoxelsChanged() override;
 
 private:
+
 
     // IMPORTANT this is testing code, it will generate a random voxel grid for the constructs
     void GenerateVoxelData();
 
-    UPROPERTY()
+     void OnVoxelsChanged();
+
+    TArray<FVoxelGridInstance> BuildGridInstances() const;
+
+    TMap<FIntVector, FVoxelGrid> SubGrids;
+
     bool m_static = false;
 };

@@ -1,16 +1,38 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "VoxelWorld.h"
 #include "VoxelChunk.h"
 #include "Kismet/GameplayStatics.h"
 
 #include "VoxelConstruct.h"
+#include "VoxelChunk.h"
+
 
 AVoxelWorld::AVoxelWorld()
 {
     // Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
     PrimaryActorTick.bCanEverTick = true;
 }
+
+AVoxelChunk* AVoxelWorld::GetChunkAt(const FIntVector& ChunkPosition) const 
+{
+    AVoxelChunk* const* Found = m_voxelChunkInstances.Find(ChunkPosition);
+    return Found ? *Found : nullptr;
+}
+
+
+void AVoxelWorld::ApplyVoxelEdit(const FIntVector chunkPos, const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value)
+{
+    for (const TPair<FIntVector, TArray<uint8>>& Entry : Edits)
+    {
+        const FIntVector TargetChunkPos = chunkPos + Entry.Key;
+
+        AVoxelChunk* TargetChunk = GetChunkAt(TargetChunkPos);
+        if (TargetChunk)
+        {
+            TargetChunk->ApplyVoxelEditLocal(Entry.Value, Value);
+        }
+    }
+}
+
 
 // Called when the game starts or when spawned
 void AVoxelWorld::BeginPlay()
@@ -141,7 +163,7 @@ void AVoxelWorld::CreateNewChunk(const FIntVector3& chunkPosition)
     FActorSpawnParameters spawnInfo = {};
 
     AVoxelChunk* voxelChunk = GetWorld()->SpawnActor<AVoxelChunk>(location, rotation, spawnInfo);
-    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures);
+    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures, this, chunkPosition);
 
     m_voxelChunkInstances.Add(chunkPosition, voxelChunk);
 }
