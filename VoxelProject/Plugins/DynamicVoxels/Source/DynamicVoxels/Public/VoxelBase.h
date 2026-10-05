@@ -43,39 +43,18 @@ public:
 protected:
     virtual void BeginPlay() override;
 
-    // One voxel grid, positioned within an actor's own local voxel-space.
-    // Offset is in VOXEL units (not world units) - a sub-grid at hashmap key
-    // (1,0,0) has Offset (32,0,0), so its own local (0,0,0) voxel sits 32
-    // voxels over, not at the actor's origin. AVoxelChunk builds a
-    // single-entry array (its one Grid, Offset (0,0,0)); AVoxelConstruct
-    // builds one entry per sub-grid in its hashmap, at SubGridKey*32. Lets
-    // RegenerateMesh/CreateCollision stay agnostic to "is this actor backed
-    // by one grid or a hashmap of them" - that distinction lives entirely in
-    // how each subclass builds this array, not in these shared functions.
+    /*
+        a single voxel grid and its position, so one actor can be made up
+        of more than one grid instead of just one
+    */
     struct FVoxelGridInstance
     {
         FIntVector Offset;
         const FVoxelGrid* Grid = nullptr;
     };
 
-    // Rebuilds the render mesh from one or more grid instances. The actual
-    // per-voxel meshing algorithm (CreateMeshPlaneGreedy /
-    // CreateMeshPlaneGreedy1D / AddFace) is whatever it already is - this
-    // just means it now runs once per grid instance, each offset into the
-    // right place, accumulating into the same shared Vertices/Normals/
-    // Indices before one combined mesh section is created at the end.
     void RegenerateMesh(const TArray<FVoxelGridInstance>& Grids);
-
-    // Only AVoxelChunk calls this (one grid, one texture) - takes the grid
-    // directly rather than an FVoxelGridInstance, since Offset has no
-    // meaning for a texture encoding raw voxel bytes.
     void CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
-
-    // Iterates every grid instance, decomposing each independently via
-    // DecompVoxel and accumulating all resulting boxes into one shared
-    // BodySetup - "jumping from hashmap to hashmap" rather than operating on
-    // one contiguous array, since DecompVoxel works on one FVoxelGrid at a
-    // time regardless of how many there are.
     void CreateCollision(const TArray<FVoxelGridInstance>& Grids);
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voxel")
