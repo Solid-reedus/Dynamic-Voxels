@@ -1,6 +1,8 @@
 #include "VoxelChunk.h"
 #include "VoxelWorld.h"
 
+#define SUPERFLAT_WORLDGEN 0
+
 // Sets default values
 AVoxelChunk::AVoxelChunk() { PrimaryActorTick.bCanEverTick = false; }
 
@@ -92,32 +94,61 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
         {
             FIntVector2 topDownPosition = FIntVector2(x + relativePosition.X, y + relativePosition.Y);
 
-            double perlin2DVal = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 160.0) * 0.5 + 0.5;
+            double perlin2DValBiome = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 200.0) * 0.5 + 0.5;
 
-            int terrainValue = static_cast<int>(perlin2DVal * perlin2DVal * 80.0 + 48.0);
+            double perlin2DVal = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 160.0) * 0.5 + 0.5;
+            if (perlin2DValBiome > 0.5) topDownPosition += FIntVector2(100, 100);
+            double perlin2DValDetail = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 64.0) * 0.5 + 0.5;
+
+            int terrainValue = static_cast<int>(perlin2DVal * perlin2DVal * 80.0 + 48.0 + perlin2DValDetail * 20.0);
+            if (perlin2DValBiome > 0.5) terrainValue -= static_cast<int>(perlin2DValBiome * 10.0);
+#if SUPERFLAT_WORLDGEN
+            terrainValue = 48;
+#endif
             terrainValue -= relativePosition.Z;
 
-            for (int z = -1; z < terrainValue; z++)
+            double BlockChoice = FMath::RandRange(0.0, 1.0);
+            BlockChoice += perlin2DValDetail * 3;
+
+            for (int z = -1; z <= static_cast<int>(VOXEL_CHUNK_SIZE); z++)
             {
-                // TODO: Check if correct, might be wrong
-                if (z > static_cast<int>(VOXEL_CHUNK_SIZE)) break;
-
-                uint8 blockType = 1;  // Stone
-                if (terrainValue - z < 3)
-                    blockType = 2;  // Grass
-                else if (terrainValue - z < 9)
-                    blockType = 3;  // Dirt
-
                 FIntVector3 worldPosition = FIntVector3(x, y, z) + relativePosition;
-                float perlinValue = FMath::PerlinNoise3D(FVector(worldPosition) / 16.0);
+                float caveValue = FMath::PerlinNoise3D(FVector(worldPosition) / 16.0);
 
-                float falloff = (128.0f - static_cast<float>(worldPosition.Z)) / 64.0f - 1.0f;
-                perlinValue += falloff;
-
-                if (perlinValue > 0.0f)
+                if (z >= terrainValue)
                 {
-                    Grid.SetVoxel(FIntVector3(x, y, z), blockType);
-                    containsSolid = true;
+                    float falloff = static_cast<float>(FMath::Abs(z - terrainValue)) * 0.08;
+                    float applied = caveValue - falloff;
+
+                    if (applied > 0.5f)
+                    {
+                        Grid.SetVoxel(FIntVector3(x, y, z), 7);  // Cobble
+                        containsSolid = true;
+                    }
+                }
+                else
+                {
+                    uint8 blockType = 1;  // Stone
+                    if (perlin2DValBiome > 0.5)
+                    {
+                        if (terrainValue - z < 9) blockType = 4;  // Sand
+                    }
+                    else
+                    {
+                        if (terrainValue - z < 3 && BlockChoice > 1.6f)
+                            blockType = 2;  // Grass
+                        else if (terrainValue - z < 9)
+                            blockType = 3;  // Dirt
+                    }
+
+                    float falloff = (128.0f - static_cast<float>(worldPosition.Z)) / 64.0f - 1.0f;
+                    float applied = caveValue + falloff;
+
+                    if (applied > -0.2f)
+                    {
+                        Grid.SetVoxel(FIntVector3(x, y, z), blockType);
+                        containsSolid = true;
+                    }
                 }
             }
         }
