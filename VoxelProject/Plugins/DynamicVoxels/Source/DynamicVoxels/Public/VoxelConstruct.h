@@ -22,6 +22,13 @@ public:
 
     virtual void ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value) override;
 
+
+	UFUNCTION(BlueprintCallable, Category = "Voxel Construct")
+    void AttachSelfTo(AVoxelConstruct* Target, const FVector& TargetWorldHitLocation, const FVector& SelfWorldHitLocation);
+
+    void MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSubGrids, const FIntVector& OriginOffset);
+
+
 protected:  
     virtual void OnConstruction(const FTransform& Transform) override;
 

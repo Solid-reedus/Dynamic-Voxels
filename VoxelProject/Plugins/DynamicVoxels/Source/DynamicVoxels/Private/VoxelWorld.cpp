@@ -3,7 +3,6 @@
 #include "Kismet/GameplayStatics.h"
 
 #include "VoxelConstruct.h"
-#include "VoxelChunk.h"
 
 
 AVoxelWorld::AVoxelWorld()
