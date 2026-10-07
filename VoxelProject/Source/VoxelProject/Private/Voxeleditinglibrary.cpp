@@ -1,5 +1,18 @@
 #include "VoxelEditingLibrary.h"
 #include "VoxelBase.h"
+#include "VoxelConstruct.h"
+
+
+
+void UVoxeleditinglibrary::AttachSelectedConstructTo(AVoxelConstruct* SelectedConstruct,
+                                                     AVoxelConstruct* Target,
+                                                     const FVector& TargetWorldHitLocation,
+                                                     const FVector& SelfWorldHitLocation)
+{
+    SelectedConstruct->AttachSelfTo(Target, TargetWorldHitLocation, SelfWorldHitLocation);
+}
+
+
 
 void UVoxeleditinglibrary::RemoveVoxelsInSphere(AVoxelBase* Target, const FVector& WorldLocation, float Radius)
 {

@@ -29,23 +29,9 @@ void AVoxelConstruct::GenerateVoxelData()
 {
     constexpr uint32 SubGridSize = 32;
 
-    // For now, everything lands in the one sub-grid at (0,0,0) - the
-    // original generator was already sized at exactly 32, matching one
-    // sub-grid precisely, so this is a direct port rather than a new design.
     FVoxelGrid& Grid = SubGrids.FindOrAdd(FIntVector(0, 0, 0));
     Grid.Initialize(SubGridSize);
 
-    // Adapted from AVoxelChunk::GenerateVoxelData - same two Perlin passes
-    // (2D height + 3D density for overhangs/caves), but sampled in the
-    // construct's own LOCAL grid coordinates rather than world position.
-    // The chunk version ties terrainValue and the falloff directly to
-    // absolute world height, which makes sense for one slice of continuous
-    // terrain; a standalone construct has no such context, and porting it
-    // verbatim means the shape (or lack of one) depends entirely on where
-    // you happen to place the actor. Centering everything on the grid's own
-    // middle instead makes this produce a similar island/outcrop shape
-    // regardless of world position. The exact numbers below are tuned to
-    // taste, not load-bearing - adjust freely.
     const float Center = (float)SubGridSize * 0.5f;
 
     for (uint32 y = 0; y < SubGridSize; y++)
@@ -89,12 +75,6 @@ void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType, bool isSta
     RegenerateMesh(GridInstances);
     CreateCollision(GridInstances);
 
-    // Enabling physics/gravity happens last, after mesh and collision
-    // actually exist - doing it earlier (as the old BeginPlay-based version
-    // did) meant this could run before there was any valid geometry to
-    // simulate against, and could race against BeginPlay applying a stale
-    // default bWorld if BeginPlay happened to run before this was called
-    // (the normal SpawnActor -> BeginPlay -> InitVoxel order).
     if (ProceduralMesh)
     {
         ProceduralMesh->SetSimulatePhysics(!m_static);
@@ -143,10 +123,6 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edit
             continue;
         }
 
-        // FindOrAdd creating a new entry here, for a sub-grid coordinate
-        // that didn't exist before, IS the construct growing - no resize,
-        // no recenter, no copying old data into a bigger array like the
-        // single-Grid version needed.
         FVoxelGrid& TargetGrid = SubGrids.FindOrAdd(SubGridCoord);
         if (TargetGrid.GridSize == 0)
         {
@@ -172,6 +148,90 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edit
     RegenerateMesh(GridInstances);
     CreateCollision(GridInstances);
     OnVoxelsChanged();
+}
+
+void AVoxelConstruct::MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSubGrids, const FIntVector& OriginOffset)
+{
+    constexpr int32 SubGridSize = 32;
+    constexpr int32 SubGridShift = 5; 
+    constexpr int32 SubGridMask = 31;
+
+    for (const TPair<FIntVector, FVoxelGrid>& OtherEntry : OtherSubGrids)
+    {
+        const FIntVector& OtherSubGridCoord = OtherEntry.Key;
+        const FVoxelGrid& OtherGrid = OtherEntry.Value;
+
+        for (int32 LocalZ = 0; LocalZ < SubGridSize; ++LocalZ)
+        {
+            for (int32 LocalY = 0; LocalY < SubGridSize; ++LocalY)
+            {
+                for (int32 LocalX = 0; LocalX < SubGridSize; ++LocalX)
+                {
+                    const uint8 Value = OtherGrid.GetVoxel(FIntVector3(LocalX, LocalY, LocalZ));
+                    if (Value == 0)
+                    {
+                        continue;
+                    }
+
+                    const FIntVector GlobalPos(OtherSubGridCoord.X * SubGridSize + LocalX + OriginOffset.X,
+                                               OtherSubGridCoord.Y * SubGridSize + LocalY + OriginOffset.Y,
+                                               OtherSubGridCoord.Z * SubGridSize + LocalZ + OriginOffset.Z);
+
+                    const FIntVector TargetSubGridCoord(GlobalPos.X >> SubGridShift,
+                                                        GlobalPos.Y >> SubGridShift,
+                                                        GlobalPos.Z >> SubGridShift);
+                    const int32 TargetLocalX = GlobalPos.X & SubGridMask;
+                    const int32 TargetLocalY = GlobalPos.Y & SubGridMask;
+                    const int32 TargetLocalZ = GlobalPos.Z & SubGridMask;
+
+                    FVoxelGrid& TargetGrid = SubGrids.FindOrAdd(TargetSubGridCoord);
+                    if (TargetGrid.GridSize == 0)
+                    {
+                        TargetGrid.Initialize(SubGridSize);
+                    }
+
+                    TargetGrid.SetVoxel(FIntVector3(TargetLocalX, TargetLocalY, TargetLocalZ), Value);
+                }
+            }
+        }
+    }
+
+    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
+    RegenerateMesh(GridInstances);
+    CreateCollision(GridInstances);
+    OnVoxelsChanged();
+}
+
+
+
+
+void AVoxelConstruct::AttachSelfTo(AVoxelConstruct* Target, const FVector& TargetWorldHitLocation, const FVector& SelfWorldHitLocation)
+{
+    if (!Target || Target == this)
+    {
+        return;
+    }
+ 
+    const FVector TargetLocalLocation = Target->GetActorTransform().InverseTransformPosition(TargetWorldHitLocation);
+    const FVector SelfLocalLocation = GetActorTransform().InverseTransformPosition(SelfWorldHitLocation);
+    const FVector TargetGridSpaceLocation = TargetLocalLocation / static_cast<double>(Target->VoxelSize);
+
+    const FIntVector TargetAttachPoint(
+        FMath::RoundToInt(TargetGridSpaceLocation.X),
+        FMath::RoundToInt(TargetGridSpaceLocation.Y),
+        FMath::RoundToInt(TargetGridSpaceLocation.Z));
+ 
+    const FVector SelfGridSpaceLocation = SelfLocalLocation / static_cast<double>(Target->VoxelSize);
+    const FIntVector SelfAttachPoint(
+        FMath::RoundToInt(SelfGridSpaceLocation.X),
+        FMath::RoundToInt(SelfGridSpaceLocation.Y),
+        FMath::RoundToInt(SelfGridSpaceLocation.Z));
+ 
+    const FIntVector OriginOffset = TargetAttachPoint - SelfAttachPoint;
+ 
+    Target->MergeVoxelData(SubGrids, OriginOffset);
+ 
+    Destroy();
 }
 
 
