@@ -120,6 +120,7 @@ void AVoxelBase::CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* 
 void AVoxelBase::CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection)
 {
     const FVoxelGrid& Grid = *GridInstance.Grid;
+    if (Grid.GridSize == 0) return;
 
     FIntVector2 Normal;
     bool UsingXZPlane = false;
@@ -206,6 +207,7 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance,
 void AVoxelBase::CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection)
 {
     const FVoxelGrid& Grid = *GridInstance.Grid;
+    if (Grid.GridSize == 0) return;
 
     FIntVector2 Normal;
     bool UsingXZPlane = false;

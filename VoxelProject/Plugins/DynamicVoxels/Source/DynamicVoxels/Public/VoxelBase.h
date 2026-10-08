@@ -39,7 +39,8 @@ public:
     UPROPERTY(VisibleAnywhere, Category = "Voxel")
     uint32 VoxelSize = 100;
 
-    virtual void ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value) {}
+    virtual FIntVector WorldToGridPosition(const FVector& WorldPos) { return FIntVector(); }
+    virtual void ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits) {}
 
 protected:
     virtual void BeginPlay() override;

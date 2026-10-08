@@ -16,16 +16,41 @@ AVoxelChunk* AVoxelWorld::GetChunkAt(const FIntVector& ChunkPosition) const
     return Found ? *Found : nullptr;
 }
 
-void AVoxelWorld::ApplyVoxelEdit(const FIntVector chunkPos, const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value)
+void AVoxelWorld::ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits)
 {
-    for (const TPair<FIntVector, TArray<uint8>>& Entry : Edits)
-    {
-        const FIntVector TargetChunkPos = chunkPos + Entry.Key;
+    FIntVector EditsMinPos = FIntVector(INT32_MAX);
+    FIntVector EditsMaxPos = FIntVector(INT32_MIN);
 
-        AVoxelChunk* TargetChunk = GetChunkAt(TargetChunkPos);
-        if (TargetChunk)
+    for (const auto& Edit : Edits)
+    {
+        EditsMinPos.X = FMath::Min(Edit.Key.X, EditsMinPos.X);
+        EditsMinPos.Y = FMath::Min(Edit.Key.Y, EditsMinPos.Y);
+        EditsMinPos.Z = FMath::Min(Edit.Key.Z, EditsMinPos.Z);
+
+        EditsMaxPos.X = FMath::Max(Edit.Key.X, EditsMaxPos.X);
+        EditsMaxPos.Y = FMath::Max(Edit.Key.Y, EditsMaxPos.Y);
+        EditsMaxPos.Z = FMath::Max(Edit.Key.Z, EditsMaxPos.Z);
+    }
+
+    // TODO(David): Current issue where chunks right next to edit dont get updated, cause those chunks are outside of
+    // ChunkMin / ChunkMax range
+    // Temporary fix in the line below
+    EditsMinPos -= FIntVector(1);
+    EditsMaxPos += FIntVector(1);
+
+    FIntVector ChunkMin = GridToChunkPosition(EditsMinPos);
+    FIntVector ChunkMax = GridToChunkPosition(EditsMaxPos);
+
+    // Only call ApplyVoxelEditLocal() for chunks that overlap with the voxel edit
+    for (int z = ChunkMin.Z; z <= ChunkMax.Z; ++z)
+    {
+        for (int y = ChunkMin.Y; y <= ChunkMax.Y; ++y)
         {
-            TargetChunk->ApplyVoxelEditLocal(Entry.Value, Value);
+            for (int x = ChunkMin.X; x <= ChunkMax.X; ++x)
+            {
+                AVoxelChunk* Target = GetChunkAt(FIntVector(x, y, z));
+                if (Target) Target->ApplyVoxelEditLocal(Edits);
+            }
         }
     }
 }
@@ -173,6 +198,17 @@ void AVoxelWorld::LoadBaseMaterial()
 FIntVector3 AVoxelWorld::WorldToChunkPosition(const FVector& position) const
 {
     FVector relativePosition = position / FVector(VoxelSize);
+    relativePosition /= FVector(AVoxelBase::VOXEL_CHUNK_SIZE);                          
+    FIntVector3 final = FIntVector3(static_cast<int>(FMath::Floor(relativePosition.X)), 
+                                    static_cast<int>(FMath::Floor(relativePosition.Y)), 
+                                    static_cast<int>(FMath::Floor(relativePosition.Z)));
+
+    return final;
+}
+
+FIntVector3 AVoxelWorld::GridToChunkPosition(const FIntVector& position)
+{
+    FVector relativePosition = FVector(position);
     relativePosition /= FVector(AVoxelBase::VOXEL_CHUNK_SIZE);
     FIntVector3 final = FIntVector3(static_cast<int>(FMath::Floor(relativePosition.X)),
                                     static_cast<int>(FMath::Floor(relativePosition.Y)),

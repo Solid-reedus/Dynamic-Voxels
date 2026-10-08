@@ -20,26 +20,22 @@ public:
     // init voxel construct based on grid data
     void InitVoxel(EVoxelCollisionType NewCollisionType, const TMap<FIntVector, FVoxelGrid>& InSubGrids, bool isStatic);
 
-    virtual void ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value) override;
+    virtual void ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits) override;
+    virtual FIntVector WorldToGridPosition(const FVector& Position) override;
 
-
-	UFUNCTION(BlueprintCallable, Category = "Voxel Construct")
+    UFUNCTION(BlueprintCallable, Category = "Voxel Construct")
     void AttachSelfTo(AVoxelConstruct* Target, const FVector& TargetWorldHitLocation, const FVector& SelfWorldHitLocation);
 
     void MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSubGrids, const FIntVector& OriginOffset);
 
-
-protected:  
+protected:
     virtual void OnConstruction(const FTransform& Transform) override;
 
-
 private:
-
-
     // IMPORTANT this is testing code, it will generate a random voxel grid for the constructs
     void GenerateVoxelData();
 
-     void OnVoxelsChanged();
+    void OnVoxelsChanged();
 
     TArray<FVoxelGridInstance> BuildGridInstances() const;
 
