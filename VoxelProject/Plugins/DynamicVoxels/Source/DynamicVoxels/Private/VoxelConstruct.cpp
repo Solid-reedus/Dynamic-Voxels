@@ -19,7 +19,7 @@ TArray<AVoxelConstruct::FVoxelGridInstance> AVoxelConstruct::BuildGridInstances(
     constexpr int32 SubGridSize = 32;
     for (const TPair<FIntVector, FVoxelGrid>& Entry : SubGrids)
     {
-        GridInstances.Add({ Entry.Key * SubGridSize, &Entry.Value });
+        GridInstances.Add({Entry.Key * SubGridSize, &Entry.Value});
     }
 
     return GridInstances;
@@ -82,7 +82,9 @@ void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType, bool isSta
     }
 }
 
-void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType, const TMap<FIntVector, FVoxelGrid>& InSubGrids, bool isStatic)
+void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType,
+                                const TMap<FIntVector, FVoxelGrid>& InSubGrids,
+                                bool isStatic)
 {
     m_static = isStatic;
     CollisionType = NewCollisionType;
@@ -117,9 +119,15 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edit
 
         if (Mask.Num() != VoxelsPerSubGrid)
         {
-            UE_LOG(LogTemp, Warning,
-                TEXT("%s: edit mask for sub-grid (%d,%d,%d) has %d entries, expected %d - skipping"),
-                *GetName(), SubGridCoord.X, SubGridCoord.Y, SubGridCoord.Z, Mask.Num(), VoxelsPerSubGrid);
+            UE_LOG(LogTemp,
+                   Warning,
+                   TEXT("%s: edit mask for sub-grid (%d,%d,%d) has %d entries, expected %d - skipping"),
+                   *GetName(),
+                   SubGridCoord.X,
+                   SubGridCoord.Y,
+                   SubGridCoord.Z,
+                   Mask.Num(),
+                   VoxelsPerSubGrid);
             continue;
         }
 
@@ -153,7 +161,7 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edit
 void AVoxelConstruct::MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSubGrids, const FIntVector& OriginOffset)
 {
     constexpr int32 SubGridSize = 32;
-    constexpr int32 SubGridShift = 5; 
+    constexpr int32 SubGridShift = 5;
     constexpr int32 SubGridMask = 31;
 
     for (const TPair<FIntVector, FVoxelGrid>& OtherEntry : OtherSubGrids)
@@ -202,40 +210,34 @@ void AVoxelConstruct::MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSu
     OnVoxelsChanged();
 }
 
-
-
-
-void AVoxelConstruct::AttachSelfTo(AVoxelConstruct* Target, const FVector& TargetWorldHitLocation, const FVector& SelfWorldHitLocation)
+void AVoxelConstruct::AttachSelfTo(AVoxelConstruct* Target,
+                                   const FVector& TargetWorldHitLocation,
+                                   const FVector& SelfWorldHitLocation)
 {
     if (!Target || Target == this)
     {
         return;
     }
- 
+
     const FVector TargetLocalLocation = Target->GetActorTransform().InverseTransformPosition(TargetWorldHitLocation);
     const FVector SelfLocalLocation = GetActorTransform().InverseTransformPosition(SelfWorldHitLocation);
     const FVector TargetGridSpaceLocation = TargetLocalLocation / static_cast<double>(Target->VoxelSize);
 
-    const FIntVector TargetAttachPoint(
-        FMath::RoundToInt(TargetGridSpaceLocation.X),
-        FMath::RoundToInt(TargetGridSpaceLocation.Y),
-        FMath::RoundToInt(TargetGridSpaceLocation.Z));
- 
+    const FIntVector TargetAttachPoint(FMath::RoundToInt(TargetGridSpaceLocation.X),
+                                       FMath::RoundToInt(TargetGridSpaceLocation.Y),
+                                       FMath::RoundToInt(TargetGridSpaceLocation.Z));
+
     const FVector SelfGridSpaceLocation = SelfLocalLocation / static_cast<double>(Target->VoxelSize);
-    const FIntVector SelfAttachPoint(
-        FMath::RoundToInt(SelfGridSpaceLocation.X),
-        FMath::RoundToInt(SelfGridSpaceLocation.Y),
-        FMath::RoundToInt(SelfGridSpaceLocation.Z));
- 
+    const FIntVector SelfAttachPoint(FMath::RoundToInt(SelfGridSpaceLocation.X),
+                                     FMath::RoundToInt(SelfGridSpaceLocation.Y),
+                                     FMath::RoundToInt(SelfGridSpaceLocation.Z));
+
     const FIntVector OriginOffset = TargetAttachPoint - SelfAttachPoint;
- 
+
     Target->MergeVoxelData(SubGrids, OriginOffset);
- 
+
     Destroy();
 }
-
-
-
 
 void AVoxelConstruct::OnVoxelsChanged()
 {
@@ -398,4 +400,4 @@ void AVoxelConstruct::OnVoxelsChanged()
 
     TMap<FIntVector, FVoxelGrid> LargestSubGrids = BuildSubGridsForIsland(Islands[LargestIndex]);
     InitVoxel(CollisionType, LargestSubGrids, m_static);
-}
+}   

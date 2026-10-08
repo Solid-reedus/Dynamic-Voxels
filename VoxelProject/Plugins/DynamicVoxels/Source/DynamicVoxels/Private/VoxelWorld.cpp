@@ -4,19 +4,17 @@
 
 #include "VoxelConstruct.h"
 
-
 AVoxelWorld::AVoxelWorld()
 {
     // Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
     PrimaryActorTick.bCanEverTick = true;
 }
 
-AVoxelChunk* AVoxelWorld::GetChunkAt(const FIntVector& ChunkPosition) const 
+AVoxelChunk* AVoxelWorld::GetChunkAt(const FIntVector& ChunkPosition) const
 {
     AVoxelChunk* const* Found = m_voxelChunkInstances.Find(ChunkPosition);
     return Found ? *Found : nullptr;
 }
-
 
 void AVoxelWorld::ApplyVoxelEdit(const FIntVector chunkPos, const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value)
 {
@@ -31,7 +29,6 @@ void AVoxelWorld::ApplyVoxelEdit(const FIntVector chunkPos, const TMap<FIntVecto
         }
     }
 }
-
 
 // Called when the game starts or when spawned
 void AVoxelWorld::BeginPlay()
@@ -70,7 +67,6 @@ void AVoxelWorld::BeginPlay()
         }
     }
 
-
     // Hardcoded test spawn, remove once real placement logic exists
     const FVector TestConstructLocation(100.0f, 100.0f, 12000.0f);
     AVoxelConstruct* TestConstruct = GetWorld()->SpawnActor<AVoxelConstruct>(TestConstructLocation, FRotator::ZeroRotator);
@@ -79,7 +75,6 @@ void AVoxelWorld::BeginPlay()
         TestConstruct->InitVoxel(EVoxelCollisionType::ThreeGDM, false);
     }
     m_constructInstances.Add(TestConstruct);
-
 }
 
 // Called every frame

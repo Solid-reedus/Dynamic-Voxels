@@ -35,7 +35,6 @@ public:
     UPROPERTY(VisibleAnywhere, Category = "Voxel")
     EVoxelCollisionType CollisionType = EVoxelCollisionType::ThreeGDM;
 
-
     // migh need to make this a normal property, as all voxels actors need to be same size
     UPROPERTY(VisibleAnywhere, Category = "Voxel")
     uint32 VoxelSize = 100;

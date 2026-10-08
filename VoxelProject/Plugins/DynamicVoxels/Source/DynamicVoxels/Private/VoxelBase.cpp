@@ -346,7 +346,6 @@ void AVoxelBase::CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, E
         }
     }
 
-
     TempPlaneBitData.Empty();
 }
 
@@ -458,7 +457,6 @@ void AVoxelBase::CreateCollision(const TArray<FVoxelGridInstance>& Grids)
         if (CollisionType == EVoxelCollisionType::MaxIS || CollisionType == EVoxelCollisionType::IS1)
         {
             const float Density = DecompVoxel::EstimateConcaveEdgeDensity(Grid);
-
         }
 
         if (CollisionType == EVoxelCollisionType::ConvexHull)

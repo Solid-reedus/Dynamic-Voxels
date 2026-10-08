@@ -40,7 +40,7 @@ void AVoxelChunk::ApplyVoxelEdit(const TMap<FIntVector, TArray<uint8>>& Edits, u
     m_world->ApplyVoxelEdit(m_chunkPos, Edits, Value);
 }
 
-void AVoxelChunk::ApplyVoxelEditLocal(const TArray<uint8>& Mask, uint8 Value) 
+void AVoxelChunk::ApplyVoxelEditLocal(const TArray<uint8>& Mask, uint8 Value)
 {
     constexpr int32 VoxelsPerChunk = VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE * VOXEL_CHUNK_SIZE;
     if (Mask.Num() != VoxelsPerChunk)

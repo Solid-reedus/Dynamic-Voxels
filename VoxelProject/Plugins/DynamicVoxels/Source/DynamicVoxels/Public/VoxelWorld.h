@@ -36,13 +36,10 @@ public:
     // Sets default values for this actor's properties
     AVoxelWorld();
 
-
     UFUNCTION(BlueprintCallable, Category = "Voxel World")
     AVoxelChunk* GetChunkAt(const FIntVector& ChunkPosition) const;
 
     void ApplyVoxelEdit(const FIntVector chunkPos, const TMap<FIntVector, TArray<uint8>>& Edits, uint8 Value);
-
-
 
 protected:
     // Called when the game starts or when spawned
@@ -52,7 +49,6 @@ protected:
     virtual void Tick(float DeltaTime) override;
 
 private:
-
     TQueue<FIntVector3> m_chunkAddQueue;
     FIntVector2 m_prevPawnChunkPosition;
     TMap<FIntVector, AVoxelChunk*> m_voxelChunkInstances;

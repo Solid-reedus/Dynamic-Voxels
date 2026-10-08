@@ -14,7 +14,11 @@ class DYNAMICVOXELS_API AVoxelChunk : public AVoxelBase
 public:
     AVoxelChunk();
 
-    void InitializeChunk(uint32 voxelSize, UMaterial* baseMaterial, UTexture2DArray* voxelTextures, AVoxelWorld* world, FIntVector chunkPos);
+    void InitializeChunk(uint32 voxelSize,
+                         UMaterial* baseMaterial,
+                         UTexture2DArray* voxelTextures,
+                         AVoxelWorld* world,
+                         FIntVector chunkPos);
     const FIntVector& GetChunkPosition() const { return m_chunkPosition; }
     bool IsChunkUniform() const { return m_isChunkUniform; }
 
@@ -41,6 +45,4 @@ private:
 
     UPROPERTY()
     FIntVector m_chunkPos;
-
-
 };
