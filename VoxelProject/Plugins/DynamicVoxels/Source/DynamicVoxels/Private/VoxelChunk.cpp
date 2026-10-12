@@ -39,10 +39,9 @@ void AVoxelChunk::InitializeChunk(uint32 voxelSize,
     m_chunkPos = chunkPos;
 
     GenerateVoxelData(voxelSize);
+    CreateMaterialInstance(Grid, baseMaterial, voxelTextures);
     if (!IsChunkUniform())
     {
-        CreateMaterialInstance(Grid, baseMaterial, voxelTextures);
-
         const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
         RegenerateMesh(GridInstances);
         CreateCollision(GridInstances);
