@@ -30,8 +30,6 @@ class DYNAMICVOXELS_API AVoxelBase : public AActor
 public:
     static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
 
-    AVoxelBase();
-
     UPROPERTY(VisibleAnywhere, Category = "Voxel")
     EVoxelCollisionType CollisionType = EVoxelCollisionType::ThreeGDM;
 
@@ -39,8 +37,16 @@ public:
     UPROPERTY(VisibleAnywhere, Category = "Voxel")
     uint32 VoxelSize = 100;
 
+    AVoxelBase();
+
+    UFUNCTION(BlueprintCallable, Category = "Voxel Editing")
     virtual FIntVector WorldToGridPosition(const FVector& WorldPos) { return FIntVector(); }
+
+    UFUNCTION(BlueprintCallable, Category = "Voxel Editing")
     virtual void ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits) {}
+
+    UFUNCTION(BlueprintCallable, Category = "Voxel Editing")
+    void ApplyVoxelEditArray(const TArray<FIntVector>& Positions, uint8 VoxelType);
 
 protected:
     virtual void BeginPlay() override;
@@ -59,13 +65,13 @@ protected:
     void CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
     void CreateCollision(const TArray<FVoxelGridInstance>& Grids);
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voxel")
+    UPROPERTY()
     UProceduralMeshComponent* ProceduralMesh = nullptr;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voxel")
+    UPROPERTY()
     UMaterialInstanceDynamic* MaterialInstance = nullptr;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Voxel")
+    UPROPERTY()
     UTexture2D* VoxelDataTexture = nullptr;
 
 private:
@@ -80,5 +86,5 @@ private:
 
     TArray<uint64> TempPlaneBitData;
 
-    bool m_materialDataCreated = false;
+    bool MaterialDataCreated = false;
 };

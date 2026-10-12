@@ -24,6 +24,18 @@ AVoxelBase::AVoxelBase()
     ProceduralMesh->SetSimulatePhysics(false);
 }
 
+void AVoxelBase::ApplyVoxelEditArray(const TArray<FIntVector>& Positions, uint8 VoxelType)
+{
+    TMap<FIntVector, uint8> Edits;
+
+    for (const auto& Position : Positions)
+    {
+        Edits.Add(Position, VoxelType);
+    }
+
+    ApplyVoxelEdit(Edits);
+}
+
 void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
 
 void AVoxelBase::RegenerateMesh(const TArray<FVoxelGridInstance>& Grids)
@@ -78,7 +90,7 @@ void AVoxelBase::RegenerateMesh(const TArray<FVoxelGridInstance>& Grids)
 void AVoxelBase::CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
 {
     // Create material and texture if they don't exist yet
-    if (baseMaterial && voxelTextures && m_materialDataCreated == false)
+    if (baseMaterial && voxelTextures && MaterialDataCreated == false)
     {
         // Create texture to store voxel data
         uint32 textureHeight = VoxelGrid.Data.Num() / VoxelGrid.GridSize;
@@ -109,7 +121,7 @@ void AVoxelBase::CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* 
 
         ProceduralMesh->SetMaterial(0, MaterialInstance);
 
-        m_materialDataCreated = true;
+        MaterialDataCreated = true;
     }
     else
     {
