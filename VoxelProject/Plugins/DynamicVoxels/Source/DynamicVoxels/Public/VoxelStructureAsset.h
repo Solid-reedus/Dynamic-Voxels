@@ -8,6 +8,7 @@
 #include "EditorViewportClient.h"
 #include "AdvancedPreviewScene.h"
 #include "SEditorViewport.h"
+#include "ProceduralMeshComponent.h"
 #include "VoxelStructureAsset.generated.h"
 
 /**
@@ -19,7 +20,7 @@ class DYNAMICVOXELS_API UVoxelStructureAsset : public UDataAsset
     GENERATED_BODY()
 
 public:
-    UPROPERTY(EditAnywhere) TObjectPtr<UStaticMesh> PreviewMesh;
+    UPROPERTY(EditAnywhere) TMap<FIntVector, uint8> VoxelData;
 };
 
 /**
@@ -64,21 +65,9 @@ public:
     virtual FText GetAssetDisplayName() const override { return INVTEXT("Voxel Structure Asset"); }
     virtual FLinearColor GetAssetColor() const override { return FLinearColor::Green; }
     virtual TSoftClassPtr<UObject> GetAssetClass() const override { return UVoxelStructureAsset::StaticClass(); }
-    virtual TConstArrayView<FAssetCategoryPath> GetAssetCategories() const override
-    {
-        static const auto Cats = {EAssetCategoryPaths::Misc};
-        return Cats;
-    }
 
-    virtual EAssetCommandResult OpenAssets(const FAssetOpenArgs& OpenArgs) const override
-    {
-        for (UVoxelStructureAsset* Asset : OpenArgs.LoadObjects<UVoxelStructureAsset>())
-        {
-            TSharedRef<FVSEAssetEditorToolkit> Editor = MakeShared<FVSEAssetEditorToolkit>();
-            Editor->InitEditor(OpenArgs.GetToolkitMode(), OpenArgs.ToolkitHost, Asset);
-        }
-        return EAssetCommandResult::Handled;
-    }
+    virtual TConstArrayView<FAssetCategoryPath> GetAssetCategories() const override;
+    virtual EAssetCommandResult OpenAssets(const FAssetOpenArgs& OpenArgs) const override;
 };
 
 UCLASS()
@@ -97,27 +86,27 @@ public:
                                       FFeedbackContext* Warn) override;
 };
 
+class SVSEViewport;
+
 class FVSEViewportClient : public FEditorViewportClient
 {
 public:
-    FVSEViewportClient(FAdvancedPreviewScene* InScene, const TSharedRef<SEditorViewport>& InViewport)
-        : FEditorViewportClient(nullptr, InScene, InViewport)
-    {
-        SetRealtime(true);
-        SetViewLocation(FVector(-300, 0, 150));
-        SetViewRotation(FRotator(-15, 0, 0));
-        SetViewportType(LVT_Perspective);
-        EngineShowFlags.SetGrid(true);
-    }
+    FVSEViewportClient(FAdvancedPreviewScene* InScene, const TSharedRef<SVSEViewport>& InViewport);
 
-    virtual void Tick(float DeltaSeconds) override
-    {
-        FEditorViewportClient::Tick(DeltaSeconds);
-        if (PreviewScene)
-        {
-            PreviewScene->GetWorld()->Tick(LEVELTICK_All, DeltaSeconds);
-        }
-    }
+protected:
+    virtual void Tick(float DeltaSeconds) override;
+
+    virtual void MouseMove(FViewport* InViewport, int32 X, int32 Y) override;
+    virtual bool InputKey(const FInputKeyEventArgs& EventArgs) override;
+
+    virtual void Draw(const FSceneView* View, FPrimitiveDrawInterface* PDI) override;
+
+private:
+    bool bHasHoverPoint = false;
+    FVector HoverPoint = FVector::ZeroVector;
+    FVector HoverNormal = FVector::ZeroVector;
+
+    TSharedPtr<SVSEViewport> Viewport;
 };
 
 class SVSEViewport : public SEditorViewport
@@ -126,33 +115,37 @@ public:
     SLATE_BEGIN_ARGS(SVSEViewport) {}
     SLATE_END_ARGS()
 
-    void Construct(const FArguments& InArgs, TSharedPtr<FAdvancedPreviewScene> InScene)
+    enum class EFaceDirection
     {
-        PreviewScene = InScene;
-        SEditorViewport::Construct(SEditorViewport::FArguments());
-    }
+        POSITIVE_X,
+        NEGATIVE_X,
+        POSITIVE_Y,
+        NEGATIVE_Y,
+        POSITIVE_Z,
+        NEGATIVE_Z
+    };
 
-    UStaticMeshComponent* GetMeshComponent() const { return MeshComp; }
+    void Construct(const FArguments& InArgs, TSharedPtr<FAdvancedPreviewScene> InScene, UVoxelStructureAsset* InAsset);
 
-    void SetMesh(UStaticMesh* Mesh)
-    {
-        if (!MeshComp)
-        {
-            MeshComp = NewObject<UStaticMeshComponent>(GetTransientPackage());
-            PreviewScene->AddComponent(MeshComp, FTransform::Identity);
-        }
-        MeshComp->SetStaticMesh(Mesh);
-    }
+    void RegenerateVoxelMesh();
 
 protected:
-    virtual TSharedRef<FEditorViewportClient> MakeEditorViewportClient() override
-    {
-        ViewportClient = MakeShared<FVSEViewportClient>(PreviewScene.Get(), SharedThis(this));
-        return ViewportClient.ToSharedRef();
-    }
+    virtual TSharedRef<FEditorViewportClient> MakeEditorViewportClient() override;
 
 private:
+    friend class FVSEViewportClient;
+
+    void AddFace(const FVector& Position, EFaceDirection FaceDirection, uint8 VoxelType);
+
+    TArray<FVector> Vertices;
+    TArray<FVector> Normals;
+    TArray<FVector2D> Uvs;
+    TArray<int32> Indices;
+    int32 IndexCount = 0;
+
     TSharedPtr<FAdvancedPreviewScene> PreviewScene;
     TSharedPtr<FVSEViewportClient> ViewportClient;
-    TObjectPtr<UStaticMeshComponent> MeshComp;
+    
+    TObjectPtr<UVoxelStructureAsset> Asset;
+    TObjectPtr<UProceduralMeshComponent> ProcMeshComponent;
 };
