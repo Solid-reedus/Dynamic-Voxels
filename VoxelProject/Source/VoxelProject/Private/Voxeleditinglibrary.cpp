@@ -2,8 +2,6 @@
 #include "VoxelBase.h"
 #include "VoxelConstruct.h"
 
-
-
 void UVoxeleditinglibrary::AttachSelectedConstructTo(AVoxelConstruct* SelectedConstruct,
                                                      AVoxelConstruct* Target,
                                                      const FVector& TargetWorldHitLocation,
@@ -11,8 +9,6 @@ void UVoxeleditinglibrary::AttachSelectedConstructTo(AVoxelConstruct* SelectedCo
 {
     SelectedConstruct->AttachSelfTo(Target, TargetWorldHitLocation, SelfWorldHitLocation);
 }
-
-
 
 void UVoxeleditinglibrary::RemoveVoxelsInSphere(AVoxelBase* Target, const FVector& WorldLocation, float Radius)
 {
@@ -26,13 +22,10 @@ void UVoxeleditinglibrary::AddVoxelsInSphere(AVoxelBase* Target, const FVector& 
 
 void UVoxeleditinglibrary::ApplySphereEdit(AVoxelBase* Target, const FVector& WorldLocation, float Radius, uint8 Value)
 {
-    if (!Target || Target->VoxelSize == 0)
-    {
+    if (!Target || Target->VoxelSize == 0 || Radius < 0.0f)
         return;
-    }
 
-    const FVector LocalLocation = Target->GetActorTransform().InverseTransformPosition(WorldLocation);
-    const FVector GridSpaceLocation = LocalLocation / static_cast<float>(Target->VoxelSize);
+    const FIntVector GridSpaceLocation = Target->WorldToGridPosition(WorldLocation);
     const float RadiusInVoxels = Radius / static_cast<float>(Target->VoxelSize);
 
     const int32 MinX = FMath::FloorToInt(GridSpaceLocation.X - RadiusInVoxels);
@@ -44,12 +37,7 @@ void UVoxeleditinglibrary::ApplySphereEdit(AVoxelBase* Target, const FVector& Wo
 
     const float RadiusSq = RadiusInVoxels * RadiusInVoxels;
 
-    constexpr int32 SubRegionShift = 5;  // log2(32)
-    constexpr int32 SubRegionMask = 31;  // 32 - 1
-    constexpr int32 VoxelsPerSubRegion = 32 * 32 * 32;
-
-    TMap<FIntVector, TArray<uint8>> Edits;
-    int32 TouchedCount = 0;
+    TMap<FIntVector, uint8> Edits;
 
     for (int32 z = MinZ; z <= MaxZ; ++z)
     {
@@ -57,30 +45,14 @@ void UVoxeleditinglibrary::ApplySphereEdit(AVoxelBase* Target, const FVector& Wo
         {
             for (int32 x = MinX; x <= MaxX; ++x)
             {
-                const FVector VoxelCenter = FVector((float)x, (float)y, (float)z) + 0.5f;
-                if (FVector::DistSquared(VoxelCenter, GridSpaceLocation) > RadiusSq)
-                {
+                const FVector VoxelCenter = FVector((float)x, (float)y, (float)z);
+                if (FVector::DistSquared(VoxelCenter, FVector(GridSpaceLocation)) > RadiusSq)
                     continue;
-                }
 
-                const FIntVector SubRegion(x >> SubRegionShift, y >> SubRegionShift, z >> SubRegionShift);
-                const int32 LocalX = x & SubRegionMask;
-                const int32 LocalY = y & SubRegionMask;
-                const int32 LocalZ = z & SubRegionMask;
-                const int32 BitIndex = (LocalZ * 32 + LocalY) * 32 + LocalX;
-
-                TArray<uint8>& Mask = Edits.FindOrAdd(SubRegion);
-                if (Mask.Num() == 0)
-                {
-                    Mask.Init(0, VoxelsPerSubRegion);
-                }
-                Mask[BitIndex] = 1;
-                ++TouchedCount;
+                Edits.Add(FIntVector(x, y, z), Value);
             }
         }
     }
 
-    UE_LOG(LogTemp, Log, TEXT("amount of voxels changed %d across %d sub-region(s)"), TouchedCount, Edits.Num());
-
-    Target->ApplyVoxelEdit(Edits, Value);
+    Target->ApplyVoxelEdit(Edits);
 }
