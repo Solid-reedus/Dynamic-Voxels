@@ -2,6 +2,8 @@
 
 #include "VoxelStructureAsset.h"
 
+#include "Engine/Texture2DArray.h"
+
 const FName FVSEAssetEditorToolkit::ViewportTabId("VSEDataAssetEditor_Viewport");
 const FName FVSEAssetEditorToolkit::DetailsTabId("VSEDataAssetEditor_Details");
 
@@ -163,30 +165,42 @@ void FVSEViewportClient::MouseMove(FViewport* InViewport, int32 X, int32 Y)
 bool FVSEViewportClient::InputKey(const FInputKeyEventArgs& EventArgs)
 {
     // Place Voxel
-    if (EventArgs.Key == EKeys::RightMouseButton && EventArgs.Event == IE_Pressed)
+    if (EventArgs.Key == EKeys::RightMouseButton && EventArgs.Event == IE_Pressed && bHoldingCtrl)
     {
         FVector RelativePosition = (HoverPoint + HoverNormal) / FVector(100.0);
         FIntVector3 Final = FIntVector3(static_cast<int>(FMath::Floor(RelativePosition.X)),
                                         static_cast<int>(FMath::Floor(RelativePosition.Y)),
                                         static_cast<int>(FMath::Floor(RelativePosition.Z)));
 
-        uint8& Voxel = Viewport->Asset->VoxelData.FindOrAdd(Final);
-        Voxel = 1; // TODO(David): Add ability to change voxel type that can be placed
+        Final.Z -= Viewport->Asset->EditorHeightOffset;
 
-        Viewport->RegenerateVoxelMesh();
+        // Only place voxel if its not air
+        if (Viewport->Asset->EditorVoxelType != 0)
+        {
+            uint8& Voxel = Viewport->Asset->VoxelData.FindOrAdd(Final);
+            Voxel = Viewport->Asset->EditorVoxelType;
+
+            Viewport->RegenerateVoxelMesh();
+        }
     }
     // Remove Voxel
-    if (EventArgs.Key == EKeys::LeftMouseButton && EventArgs.Event == IE_Pressed)
+    if (EventArgs.Key == EKeys::LeftMouseButton && EventArgs.Event == IE_Pressed && bHoldingCtrl)
     {
         FVector RelativePosition = (HoverPoint - HoverNormal) / FVector(100.0);
         FIntVector3 Final = FIntVector3(static_cast<int>(FMath::Floor(RelativePosition.X)),
                                         static_cast<int>(FMath::Floor(RelativePosition.Y)),
                                         static_cast<int>(FMath::Floor(RelativePosition.Z)));
 
+        Final.Z -= Viewport->Asset->EditorHeightOffset;
+
         Viewport->Asset->VoxelData.Remove(Final);
 
         Viewport->RegenerateVoxelMesh();
     }
+
+    if (EventArgs.Key == EKeys::LeftControl && EventArgs.Event == IE_Pressed) bHoldingCtrl = true;
+    if (EventArgs.Key == EKeys::LeftControl && EventArgs.Event == IE_Released) bHoldingCtrl = false;
+
     return FEditorViewportClient::InputKey(EventArgs);
 }
 
@@ -203,7 +217,8 @@ void FVSEViewportClient::Draw(const FSceneView* View, FPrimitiveDrawInterface* P
         Final *= 100.0;
 
         FVector Up = FVector(0.0, 0.0, 1.0);
-        if (FVector::DotProduct(HoverNormal, Up) > 0.9) Up = FVector(1.0, 0.0, 0.0);
+        if (FVector::DotProduct(HoverNormal, Up) > 0.9 || FVector::DotProduct(HoverNormal, Up) < -0.9)
+            Up = FVector(1.0, 0.0, 0.0);
 
         FVector Tangent = FVector::CrossProduct(HoverNormal, Up);
         FVector BiTangent = FVector::CrossProduct(HoverNormal, Tangent);
@@ -211,16 +226,65 @@ void FVSEViewportClient::Draw(const FSceneView* View, FPrimitiveDrawInterface* P
         Tangent = Tangent.GetAbs() * 100.0;
         BiTangent = BiTangent.GetAbs() * 100.0;
 
-        PDI->DrawLine(Final, Final + Tangent, FLinearColor::Blue, SDPG_Foreground, 4.0f);
-        PDI->DrawLine(Final, Final + BiTangent, FLinearColor::Blue, SDPG_Foreground, 4.0f);
-        PDI->DrawLine(Final + Tangent, Final + Tangent + BiTangent, FLinearColor::Blue, SDPG_Foreground, 4.0f);
-        PDI->DrawLine(Final + BiTangent, Final + Tangent + BiTangent, FLinearColor::Blue, SDPG_Foreground, 4.0f);
+        PDI->DrawLine(Final, Final + Tangent, FLinearColor::Blue, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(Final, Final + BiTangent, FLinearColor::Blue, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(Final + Tangent, Final + Tangent + BiTangent, FLinearColor::Blue, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(Final + BiTangent, Final + Tangent + BiTangent, FLinearColor::Blue, SDPG_Foreground, 2.0f);
     }
 
     // Draw structure Origin
-    PDI->DrawLine(FVector(-50.0, 0.0, 0.0), FVector(50.0, 0.0, 0.0), FLinearColor::Red, SDPG_Foreground, 4.0f);
-    PDI->DrawLine(FVector(0.0, -50.0, 0.0), FVector(0.0, 50.0, 0.0), FLinearColor::Red, SDPG_Foreground, 4.0f);
-    PDI->DrawLine(FVector(0.0, 0.0, -50.0), FVector(0.0, 0.0, 50.0), FLinearColor::Red, SDPG_Foreground, 4.0f);
+    {
+        FVector StructOrigin = FVector(0.0, 0.0, static_cast<double>(Viewport->Asset->EditorHeightOffset) * 100.0);
+
+        PDI->DrawLine(StructOrigin + FVector(0.0, 50.0, 0.0),
+                      StructOrigin + FVector(100.0, 50.0, 0.0),
+                      FLinearColor::Red,
+                      SDPG_Foreground,
+                      4.0f);
+        PDI->DrawLine(StructOrigin + FVector(50.0, 0.0, 0.0),
+                      StructOrigin + FVector(50.0, 100.0, 0.0),
+                      FLinearColor::Red,
+                      SDPG_Foreground,
+                      4.0f);
+        PDI->DrawLine(StructOrigin + FVector(50.0, 50.0, 0.0),
+                      StructOrigin + FVector(50.0, 50.0, 100.0),
+                      FLinearColor::Red,
+                      SDPG_Foreground,
+                      4.0f);
+    }
+
+    // Draw structure Bounds
+    if (!Viewport->Asset->BoundsScale.IsZero())
+    {
+        FVector WorldMin =
+            FVector(Viewport->Asset->BoundsOrigin + FIntVector(0, 0, Viewport->Asset->EditorHeightOffset)) * 100.0;
+        FVector WorldScale = FVector(Viewport->Asset->BoundsScale) * 100.0;
+
+        FVector V0 = WorldMin;
+        FVector V1 = WorldMin + FVector(WorldScale.X, 0.0, 0.0);
+        FVector V2 = WorldMin + FVector(WorldScale.X, WorldScale.Y, 0.0);
+        FVector V3 = WorldMin + FVector(0.0, WorldScale.Y, 0.0);
+
+        FVector V4 = WorldMin + FVector(0.0, 0.0, WorldScale.Z);
+        FVector V5 = WorldMin + FVector(WorldScale.X, 0.0, WorldScale.Z);
+        FVector V6 = WorldMin + FVector(WorldScale.X, WorldScale.Y, WorldScale.Z);
+        FVector V7 = WorldMin + FVector(0.0, WorldScale.Y, WorldScale.Z);
+
+        PDI->DrawLine(V0, V1, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V1, V2, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V2, V3, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V3, V0, FLinearColor::White, SDPG_Foreground, 2.0f);
+
+        PDI->DrawLine(V4, V5, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V5, V6, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V6, V7, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V7, V4, FLinearColor::White, SDPG_Foreground, 2.0f);
+
+        PDI->DrawLine(V0, V4, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V1, V5, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V2, V6, FLinearColor::White, SDPG_Foreground, 2.0f);
+        PDI->DrawLine(V3, V7, FLinearColor::White, SDPG_Foreground, 2.0f);
+    }
 }
 
 void SVSEViewport::Construct(const FArguments& InArgs, TSharedPtr<FAdvancedPreviewScene> InScene, UVoxelStructureAsset* InAsset)
@@ -228,6 +292,12 @@ void SVSEViewport::Construct(const FArguments& InArgs, TSharedPtr<FAdvancedPrevi
     PreviewScene = InScene;
     Asset = InAsset;
     SEditorViewport::Construct(SEditorViewport::FArguments());
+
+    // Load base material for structure editor
+    FString MaterialPath = TEXT("/DynamicVoxels/VSEMaterial.VSEMaterial");
+    BaseMaterial = Cast<UMaterial>(StaticLoadObject(UMaterial::StaticClass(), nullptr, *MaterialPath));
+
+    if (!BaseMaterial) UE_LOG(LogTemp, Error, TEXT("Failed to load base material for voxel structure editor!"));
 }
 
 void SVSEViewport::RegenerateVoxelMesh()
@@ -238,12 +308,24 @@ void SVSEViewport::RegenerateVoxelMesh()
         PreviewScene->AddComponent(ProcMeshComponent, FTransform::Identity);
     }
 
+    if (!bCreatedMatInstance && BaseMaterial)
+    {
+        MaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, ProcMeshComponent);
+        bCreatedMatInstance = true;
+    }
+
+    BoundsMin = FIntVector(INT32_MAX);
+    BoundsMax = FIntVector(INT32_MIN);
+    bool bValidVoxels = false;
+
     for (const auto& Voxel : Asset->VoxelData)
     {
         if (Voxel.Value != 0)
         {
-            FVector VoxelPos = FVector(Voxel.Key) * 100.0f;
+            FVector VoxelPos = FVector(Voxel.Key + FIntVector(0, 0, Asset->EditorHeightOffset)) * 100.0f;
 
+// If set to 0, less lag spikes with large structures, but no face culling
+#if 1
             uint8* XPos = Asset->VoxelData.Find(Voxel.Key + FIntVector(1, 0, 0));
             if (XPos == nullptr || (*XPos) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_X, Voxel.Value);
 
@@ -261,7 +343,34 @@ void SVSEViewport::RegenerateVoxelMesh()
 
             uint8* ZNeg = Asset->VoxelData.Find(Voxel.Key + FIntVector(0, 0, -1));
             if (ZNeg == nullptr || (*ZNeg) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, Voxel.Value);
+#else
+            AddFace(VoxelPos, EFaceDirection::POSITIVE_X, Voxel.Value);
+            AddFace(VoxelPos, EFaceDirection::NEGATIVE_X, Voxel.Value);
+            AddFace(VoxelPos, EFaceDirection::POSITIVE_Y, Voxel.Value);
+            AddFace(VoxelPos, EFaceDirection::NEGATIVE_Y, Voxel.Value);
+            AddFace(VoxelPos, EFaceDirection::POSITIVE_Z, Voxel.Value);
+            AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, Voxel.Value);
+#endif
+
+            BoundsMin = Voxel.Key.ComponentMin(BoundsMin);
+            BoundsMax = Voxel.Key.ComponentMax(BoundsMax);
+            bValidVoxels = true;
         }
+    }
+
+    // Update Structure's bounds
+    if (!bValidVoxels)
+    {
+        // Set everything to zero
+        BoundsMin = FIntVector::ZeroValue;
+        BoundsMax = FIntVector::ZeroValue;
+        Asset->BoundsOrigin = FIntVector::ZeroValue;
+        Asset->BoundsScale = FIntVector::ZeroValue;
+    }
+    else
+    {
+        Asset->BoundsOrigin = BoundsMin;
+        Asset->BoundsScale = (BoundsMax - BoundsMin) + FIntVector(1);
     }
 
     ProcMeshComponent->ClearAllMeshSections();
@@ -275,6 +384,11 @@ void SVSEViewport::RegenerateVoxelMesh()
                                                          TArray<FLinearColor>(),
                                                          TArray<FProcMeshTangent>(),
                                                          true);
+
+        // Set Material and update paremeters
+        MaterialInstance->SetTextureParameterValue(TEXT("VoxelTextures"), Asset->VoxelTextures);
+        MaterialInstance->SetScalarParameterValue(TEXT("TextureScale"), Asset->TextureScale);
+        ProcMeshComponent->SetMaterial(0, MaterialInstance);
     }
 
     Vertices.Empty();

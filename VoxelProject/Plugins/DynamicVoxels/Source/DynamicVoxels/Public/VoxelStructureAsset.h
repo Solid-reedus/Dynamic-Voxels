@@ -20,12 +20,33 @@ class DYNAMICVOXELS_API UVoxelStructureAsset : public UDataAsset
     GENERATED_BODY()
 
 public:
-    UPROPERTY(EditAnywhere) TMap<FIntVector, uint8> VoxelData;
+    // Properties only needed for the structure editor
+    UPROPERTY(EditAnywhere, Category = "Editor")
+    UTexture2DArray* VoxelTextures = nullptr;
+
+    UPROPERTY(EditAnywhere, Category = "Editor")
+    uint8 EditorVoxelType = 1;
+
+    UPROPERTY(EditAnywhere, Category = "Editor")
+    int32 EditorHeightOffset = 0;
+
+    UPROPERTY(EditAnywhere, Category = "Editor")
+    float TextureScale = 100.0f;
+
+    // Properties needed to spawn in structures
+    UPROPERTY(VisibleAnywhere, Category = "Data")
+    FIntVector BoundsOrigin = FIntVector::ZeroValue;
+
+    UPROPERTY(VisibleAnywhere, Category = "Data")
+    FIntVector BoundsScale = FIntVector::ZeroValue;
+
+    UPROPERTY() // Removed EditAnywhere due to performance issues
+    TMap<FIntVector, uint8> VoxelData;
 };
 
 /**
  * ===========================================================================================================
- * The Following code was made using help from Claude AI.
+ * The code for setting up a custom viewport for the data assset was made using help from Claude AI.
  * ===========================================================================================================
  */
 
@@ -106,6 +127,8 @@ private:
     FVector HoverPoint = FVector::ZeroVector;
     FVector HoverNormal = FVector::ZeroVector;
 
+    bool bHoldingCtrl = false;
+
     TSharedPtr<SVSEViewport> Viewport;
 };
 
@@ -148,4 +171,11 @@ private:
     
     TObjectPtr<UVoxelStructureAsset> Asset;
     TObjectPtr<UProceduralMeshComponent> ProcMeshComponent;
+    TObjectPtr<UMaterial> BaseMaterial;
+    TObjectPtr<UMaterialInstanceDynamic> MaterialInstance;
+
+    FIntVector BoundsMin = FIntVector::ZeroValue;
+    FIntVector BoundsMax = FIntVector::ZeroValue;
+
+    bool bCreatedMatInstance = false;
 };
