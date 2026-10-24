@@ -45,13 +45,11 @@ void AVoxelBase::RegenerateMesh()
         return;
     }
         
-    ProceduralMesh->ClearAllMeshSections();
-
     int MeshSectionIndex = 0;
 
-    for (const auto& SubGrid : SubGrids)
+    for (auto& SubGrid : SubGrids)
     {
-        if (SubGrid.Value.GridSize == 0) continue;
+        if (SubGrid.Value.GridSize == 0 || SubGrid.Value.bIsDirty == false) continue;
 
 #if MESHING_METHOD == 0
         CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::POSITIVE_X);
@@ -68,15 +66,25 @@ void AVoxelBase::RegenerateMesh()
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::POSITIVE_Z);
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::NEGATIVE_Z);
 #endif
+
+        // Ensure that the mesh section is still the same
+        if (SubGrid.Value.MeshSectionIndex == -1)
+            SubGrid.Value.MeshSectionIndex = MeshSectionIndex;
+        else
+            MeshSectionIndex = SubGrid.Value.MeshSectionIndex;
  
-        ProceduralMesh->CreateMeshSection_LinearColor(MeshSectionIndex,
-                                                      Vertices,
-                                                      Indices,
-                                                      Normals,
-                                                      TArray<FVector2D>(),
-                                                      TArray<FLinearColor>(),
-                                                      TArray<FProcMeshTangent>(),
-                                                      false);
+        if (!Vertices.IsEmpty())
+        {
+            ProceduralMesh->CreateMeshSection_LinearColor(MeshSectionIndex,
+                                                          Vertices,
+                                                          Indices,
+                                                          Normals,
+                                                          TArray<FVector2D>(),
+                                                          TArray<FLinearColor>(),
+                                                          TArray<FProcMeshTangent>(),
+                                                          false);
+        }
+
         // Set Material
         if (SubGrid.Value.MaterialInstance)
         {
@@ -519,4 +527,12 @@ void AVoxelBase::CreateCollision()
     BodySetup->InvalidatePhysicsData();
     BodySetup->CreatePhysicsMeshes();
     ProceduralMesh->RecreatePhysicsState();
+}
+
+void AVoxelBase::MarkSubGridsAsNotDirty()
+{
+    for (auto& SubGrid : SubGrids)
+    {
+        SubGrid.Value.bIsDirty = false;
+    }
 }

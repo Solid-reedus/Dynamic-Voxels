@@ -22,6 +22,9 @@ public:
 
     uint32 BitGridSize = 0;
 
+    bool bIsDirty = false;
+    int MeshSectionIndex = -1;
+
     UPROPERTY()
     UMaterialInstanceDynamic* MaterialInstance = nullptr;
 
@@ -91,6 +94,9 @@ public:
                    GridSize);
             return;
         }
+
+        // Set this grid as dirty
+        bIsDirty = true;
 
         if (PosMax < static_cast<int>(GridSize) && PosMin >= 0)
             Data[Position.Z * GridSize * GridSize + Position.Y * GridSize + Position.X] = Value;

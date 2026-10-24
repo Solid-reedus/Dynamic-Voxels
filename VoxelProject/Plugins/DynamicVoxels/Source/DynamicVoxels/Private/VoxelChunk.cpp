@@ -44,8 +44,10 @@ void AVoxelChunk::InitializeChunk(uint32 InVoxelSize,
     }
 
     GenerateVoxelData(VoxelSize);
+
     RegenerateMesh();
     CreateCollision();
+    MarkSubGridsAsNotDirty();
 }
 
 void AVoxelChunk::ApplyVoxelEditLocal(const TMap<FIntVector, uint8>& Edits)
@@ -68,6 +70,7 @@ void AVoxelChunk::ApplyVoxelEditLocal(const TMap<FIntVector, uint8>& Edits)
 
     RegenerateMesh();
     CreateCollision();
+    MarkSubGridsAsNotDirty();
 }
 
 void AVoxelChunk::SetVoxelLocal(const FIntVector& VoxelPos, uint8 Value)

@@ -57,14 +57,8 @@ protected:
     virtual void BeginPlay() override;
 
     void RegenerateMesh();
-    //void CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
     void CreateCollision();
-
-    /*UPROPERTY()
-    UMaterialInstanceDynamic* MaterialInstance = nullptr;
-
-    UPROPERTY()
-    UTexture2D* VoxelDataTexture = nullptr;*/
+    void MarkSubGridsAsNotDirty();
 
 private:
     TArray<FVector> Vertices;

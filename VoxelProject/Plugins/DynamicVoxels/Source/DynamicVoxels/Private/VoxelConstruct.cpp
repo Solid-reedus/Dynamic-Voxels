@@ -10,6 +10,7 @@ void AVoxelConstruct::OnConstruction(const FTransform& Transform)
 
     RegenerateMesh();
     CreateCollision();
+    MarkSubGridsAsNotDirty();
 }
 
 void AVoxelConstruct::GenerateVoxelData()
@@ -59,6 +60,7 @@ void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType, bool isSta
     GenerateVoxelData();
     RegenerateMesh();
     CreateCollision();
+    MarkSubGridsAsNotDirty();
 
     if (ProceduralMesh)
     {
@@ -78,6 +80,7 @@ void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType,
 
     RegenerateMesh();
     CreateCollision();
+    MarkSubGridsAsNotDirty();
 
     if (ProceduralMesh)
     {
@@ -106,6 +109,7 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits)
     RegenerateMesh();
     CreateCollision();
     OnVoxelsChanged();
+    MarkSubGridsAsNotDirty();
 }
 
 FIntVector AVoxelConstruct::WorldToGridPosition(const FVector& Position)
@@ -168,6 +172,7 @@ void AVoxelConstruct::MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSu
     RegenerateMesh();
     CreateCollision();
     OnVoxelsChanged();
+    MarkSubGridsAsNotDirty();
 }
 
 void AVoxelConstruct::AttachSelfTo(AVoxelConstruct* Target,
