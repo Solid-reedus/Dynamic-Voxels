@@ -5,17 +5,20 @@
 
 void FVoxelGrid::UpdateMaterialData()
 {
-    // Upload voxel data to texture
-    void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-    FMemory::Memcpy(TargetTextureData, Data.GetData(), Data.Num());
-    VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
-    VoxelDataTexture->UpdateResource();
+    if (VoxelDataTexture)
+    {
+        // Upload voxel data to texture
+        void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+        FMemory::Memcpy(TargetTextureData, Data.GetData(), Data.Num());
+        VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+        VoxelDataTexture->UpdateResource();
+    }
 }
 
 void FVoxelGrid::CreateMaterialInstance(uint32 VoxelSize, UMaterial* BaseMaterial, UTexture2DArray* VoxelTextures)
 {
     // Create material and texture if they don't exist yet
-    if (BaseMaterial && VoxelTextures)
+    if (BaseMaterial && VoxelTextures && MaterialInstance == nullptr)
     {
         // Create texture to store voxel data
         uint32 TextureHeight = Data.Num() / GridSize;

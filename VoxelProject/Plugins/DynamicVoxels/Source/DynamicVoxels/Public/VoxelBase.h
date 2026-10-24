@@ -60,6 +60,9 @@ protected:
     void CreateCollision();
     void MarkSubGridsAsNotDirty();
 
+    // Update the material data for all dirty sub grids
+    void UpdateMaterialDirtySubGrids();
+
 private:
     TArray<FVector> Vertices;
     TArray<FVector> Normals;

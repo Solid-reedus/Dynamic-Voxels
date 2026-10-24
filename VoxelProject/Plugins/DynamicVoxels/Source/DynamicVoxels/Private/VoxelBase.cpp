@@ -536,3 +536,12 @@ void AVoxelBase::MarkSubGridsAsNotDirty()
         SubGrid.Value.bIsDirty = false;
     }
 }
+
+void AVoxelBase::UpdateMaterialDirtySubGrids()
+{
+    for (auto& SubGrid : SubGrids)
+    {
+        if (SubGrid.Value.bIsDirty)
+            SubGrid.Value.UpdateMaterialData();
+    }
+}

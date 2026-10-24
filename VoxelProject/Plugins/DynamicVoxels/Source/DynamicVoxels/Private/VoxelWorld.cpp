@@ -89,7 +89,7 @@ void AVoxelWorld::BeginPlay()
     AVoxelConstruct* TestConstruct = GetWorld()->SpawnActor<AVoxelConstruct>(TestConstructLocation, FRotator::ZeroRotator);
     if (TestConstruct)
     {
-        TestConstruct->InitVoxel(EVoxelCollisionType::ThreeGDM, false);
+        TestConstruct->InitVoxel(EVoxelCollisionType::ThreeGDM, false, VoxelSize, BaseMaterial, VoxelTextures);
     }
     m_constructInstances.Add(TestConstruct);
 }
