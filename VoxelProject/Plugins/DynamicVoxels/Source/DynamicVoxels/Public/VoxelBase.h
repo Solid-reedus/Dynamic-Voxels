@@ -51,19 +51,12 @@ public:
 protected:
     virtual void BeginPlay() override;
 
-    /*
-        a single voxel grid and its position, so one actor can be made up
-        of more than one grid instead of just one
-    */
-    struct FVoxelGridInstance
-    {
-        FIntVector Offset;
-        const FVoxelGrid* Grid = nullptr;
-    };
+    UPROPERTY()
+    TMap<FIntVector, FVoxelGrid> SubGrids;
 
-    void RegenerateMesh(const TArray<FVoxelGridInstance>& Grids);
+    void RegenerateMesh();
     void CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
-    void CreateCollision(const TArray<FVoxelGridInstance>& Grids);
+    void CreateCollision();
 
     UPROPERTY()
     UProceduralMeshComponent* ProceduralMesh = nullptr;
@@ -75,8 +68,8 @@ protected:
     UTexture2D* VoxelDataTexture = nullptr;
 
 private:
-    void CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection);
-    void CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection);
+    void CreateMeshPlaneGreedy1D(const TPair<FIntVector, FVoxelGrid>& SubGrid, EFaceDirection FaceDirection);
+    void CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubGrid, EFaceDirection FaceDirection);
     inline void AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale);
 
     TArray<FVector> Vertices;

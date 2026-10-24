@@ -38,29 +38,29 @@ void AVoxelBase::ApplyVoxelEditArray(const TArray<FIntVector>& Positions, uint8 
 
 void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
 
-void AVoxelBase::RegenerateMesh(const TArray<FVoxelGridInstance>& Grids)
+void AVoxelBase::RegenerateMesh()
 {
 #if MESHING_METHOD == 0
-    for (const FVoxelGridInstance& GridInstance : Grids)
+    for (const auto& SubGrid : SubGrids)
     {
-        if (!GridInstance.Grid) continue;
-        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::POSITIVE_X);
-        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::NEGATIVE_X);
-        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::POSITIVE_Y);
-        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::NEGATIVE_Y);
-        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::POSITIVE_Z);
-        CreateMeshPlaneGreedy1D(GridInstance, EFaceDirection::NEGATIVE_Z);
+        if (SubGrid.Value.GridSize == 0) continue;
+        CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::POSITIVE_X);
+        CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::NEGATIVE_X);
+        CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::POSITIVE_Y);
+        CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::NEGATIVE_Y);
+        CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::POSITIVE_Z);
+        CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::NEGATIVE_Z);
     }
 #elif MESHING_METHOD == 1
-    for (const FVoxelGridInstance& GridInstance : Grids)
+    for (const auto& SubGrid : SubGrids)
     {
-        if (!GridInstance.Grid) continue;
-        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::POSITIVE_X);
-        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::NEGATIVE_X);
-        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::POSITIVE_Y);
-        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::NEGATIVE_Y);
-        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::POSITIVE_Z);
-        CreateMeshPlaneGreedy(GridInstance, EFaceDirection::NEGATIVE_Z);
+        if (SubGrid.Value.GridSize == 0) continue;
+        CreateMeshPlaneGreedy(SubGrid, EFaceDirection::POSITIVE_X);
+        CreateMeshPlaneGreedy(SubGrid, EFaceDirection::NEGATIVE_X);
+        CreateMeshPlaneGreedy(SubGrid, EFaceDirection::POSITIVE_Y);
+        CreateMeshPlaneGreedy(SubGrid, EFaceDirection::NEGATIVE_Y);
+        CreateMeshPlaneGreedy(SubGrid, EFaceDirection::POSITIVE_Z);
+        CreateMeshPlaneGreedy(SubGrid, EFaceDirection::NEGATIVE_Z);
     }
 #endif
 
@@ -129,10 +129,9 @@ void AVoxelBase::CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* 
     }
 }
 
-void AVoxelBase::CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection)
+void AVoxelBase::CreateMeshPlaneGreedy1D(const TPair<FIntVector, FVoxelGrid>& SubGrid, EFaceDirection FaceDirection)
 {
-    const FVoxelGrid& Grid = *GridInstance.Grid;
-    if (Grid.GridSize == 0) return;
+    const FVoxelGrid& Grid = SubGrid.Value;
 
     FIntVector2 Normal;
     bool UsingXZPlane = false;
@@ -194,15 +193,17 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance,
                 {
                     uint32 Leading1s = FMath::CountTrailingZeros64(~Shifted);
 
+                    FIntVector SubGridOffset = SubGrid.Key * static_cast<int>(VOXEL_CHUNK_SIZE);
+
                     FVector VoxelPos;
                     if (UsingXZPlane)
-                        VoxelPos = FVector(static_cast<double>(x + GridInstance.Offset.X),
-                                           static_cast<double>(static_cast<int>(z) + GridInstance.Offset.Y),
-                                           static_cast<double>(y + GridInstance.Offset.Z));
+                        VoxelPos = FVector(static_cast<double>(x + SubGridOffset.X),
+                                           static_cast<double>(static_cast<int>(z) + SubGridOffset.Y),
+                                           static_cast<double>(y + SubGridOffset.Z));
                     else
-                        VoxelPos = FVector(static_cast<double>(x + GridInstance.Offset.X),
-                                           static_cast<double>(y + GridInstance.Offset.Y),
-                                           static_cast<double>(static_cast<int>(z) + GridInstance.Offset.Z));
+                        VoxelPos = FVector(static_cast<double>(x + SubGridOffset.X),
+                                           static_cast<double>(y + SubGridOffset.Y),
+                                           static_cast<double>(static_cast<int>(z) + SubGridOffset.Z));
 
                     VoxelPos *= static_cast<double>(VoxelSize);
                     FVector2D FaceScale = FVector2D(static_cast<double>(VoxelSize), static_cast<double>(Leading1s * VoxelSize));
@@ -216,10 +217,9 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance,
     }
 }
 
-void AVoxelBase::CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection)
+void AVoxelBase::CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubGrid, EFaceDirection FaceDirection)
 {
-    const FVoxelGrid& Grid = *GridInstance.Grid;
-    if (Grid.GridSize == 0) return;
+    const FVoxelGrid& Grid = SubGrid.Value;
 
     FIntVector2 Normal;
     bool UsingXZPlane = false;
@@ -337,15 +337,17 @@ void AVoxelBase::CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, E
 
                     if (XScale > 0)
                     {
+                        FIntVector SubGridOffset = SubGrid.Key * static_cast<int>(VOXEL_CHUNK_SIZE);
+
                         FVector VoxelPos;
                         if (UsingXZPlane)
-                            VoxelPos = FVector(static_cast<double>(x + GridInstance.Offset.X),
-                                               static_cast<double>(static_cast<int>(z) + GridInstance.Offset.Y),
-                                               static_cast<double>(y + GridInstance.Offset.Z));
+                            VoxelPos = FVector(static_cast<double>(x + SubGridOffset.X),
+                                               static_cast<double>(static_cast<int>(z) + SubGridOffset.Y),
+                                               static_cast<double>(y + SubGridOffset.Z));
                         else
-                            VoxelPos = FVector(static_cast<double>(x + GridInstance.Offset.X),
-                                               static_cast<double>(y + GridInstance.Offset.Y),
-                                               static_cast<double>(static_cast<int>(z) + GridInstance.Offset.Z));
+                            VoxelPos = FVector(static_cast<double>(x + SubGridOffset.X),
+                                               static_cast<double>(y + SubGridOffset.Y),
+                                               static_cast<double>(static_cast<int>(z) + SubGridOffset.Z));
 
                         VoxelPos *= static_cast<double>(VoxelSize);
                         FVector2D FaceScale =
@@ -439,9 +441,9 @@ void AVoxelBase::AddFace(const FVector& Position, EFaceDirection FaceDirection, 
     IndexCount += 4;
 }
 
-void AVoxelBase::CreateCollision(const TArray<FVoxelGridInstance>& Grids)
+void AVoxelBase::CreateCollision()
 {
-    if (!ProceduralMesh || Grids.IsEmpty())
+    if (!ProceduralMesh || SubGrids.IsEmpty())
     {
         return;
     }
@@ -462,11 +464,11 @@ void AVoxelBase::CreateCollision(const TArray<FVoxelGridInstance>& Grids)
     // per-sub-grid hashmap lookup cost (a cache miss at worst, per the
     // earlier discussion) is the accepted tradeoff for not needing one
     // contiguous array at all.
-    for (const FVoxelGridInstance& GridInstance : Grids)
+    for (const auto& SubGrid : SubGrids)
     {
-        if (!GridInstance.Grid) continue;
-        const FVoxelGrid& Grid = *GridInstance.Grid;
-        const FVector WorldOffset = FVector(GridInstance.Offset) * (float)VoxelSize;
+        if (SubGrid.Value.GridSize == 0) continue;
+        const FVoxelGrid& Grid = SubGrid.Value;
+        const FVector WorldOffset = FVector(SubGrid.Key * static_cast<int>(VOXEL_CHUNK_SIZE)) * static_cast<double>(VoxelSize);
 
         if (CollisionType == EVoxelCollisionType::MaxIS || CollisionType == EVoxelCollisionType::IS1)
         {

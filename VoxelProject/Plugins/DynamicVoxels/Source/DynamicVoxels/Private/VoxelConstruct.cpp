@@ -8,23 +8,8 @@ void AVoxelConstruct::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
-}
-
-TArray<AVoxelConstruct::FVoxelGridInstance> AVoxelConstruct::BuildGridInstances() const
-{
-    TArray<FVoxelGridInstance> GridInstances;
-    GridInstances.Reserve(SubGrids.Num());
-
-    constexpr int32 SubGridSize = 32;
-    for (const TPair<FIntVector, FVoxelGrid>& Entry : SubGrids)
-    {
-        GridInstances.Add({Entry.Key * SubGridSize, &Entry.Value});
-    }
-
-    return GridInstances;
+    RegenerateMesh();
+    CreateCollision();
 }
 
 void AVoxelConstruct::GenerateVoxelData()
@@ -72,10 +57,8 @@ void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType, bool isSta
     CollisionType = NewCollisionType;
 
     GenerateVoxelData();
-
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    RegenerateMesh();
+    CreateCollision();
 
     if (ProceduralMesh)
     {
@@ -93,9 +76,8 @@ void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType,
 
     SubGrids = InSubGrids;
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    RegenerateMesh();
+    CreateCollision();
 
     if (ProceduralMesh)
     {
@@ -121,9 +103,8 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits)
         TargetGrid.SetVoxel(LocalPosition, Edit.Value);
     }
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    RegenerateMesh();
+    CreateCollision();
     OnVoxelsChanged();
 }
 
@@ -184,9 +165,8 @@ void AVoxelConstruct::MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSu
         }
     }
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    RegenerateMesh();
+    CreateCollision();
     OnVoxelsChanged();
 }
 

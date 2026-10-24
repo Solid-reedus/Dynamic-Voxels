@@ -40,14 +40,9 @@ private:
 
     void GenerateVoxelData(uint32 voxelSize);
 
-    TArray<FVoxelGridInstance> BuildGridInstances() const;
-
     UPROPERTY()
-    FVoxelGrid Grid;
-
-    UPROPERTY()
-    AVoxelWorld* m_world = nullptr;
+    AVoxelWorld* VoxelWorld = nullptr;
 
     // Chunk position in chunk space
-    FIntVector m_chunkPos;
+    FIntVector ChunkPos;
 };

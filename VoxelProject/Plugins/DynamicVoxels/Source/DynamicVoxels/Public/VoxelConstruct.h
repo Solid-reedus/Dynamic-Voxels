@@ -37,9 +37,5 @@ private:
 
     void OnVoxelsChanged();
 
-    TArray<FVoxelGridInstance> BuildGridInstances() const;
-
-    TMap<FIntVector, FVoxelGrid> SubGrids;
-
     bool m_static = false;
 };
