@@ -25,10 +25,7 @@ public:
     int32 HorizontalLoadDistance = 8;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 VerticalLoadDistance = 4;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    int32 ChunkUpdateRate = 2;
+    int32 ChunkUpdateRate = 1;
 
     UPROPERTY(VisibleAnywhere)
     UMaterial* BaseMaterial = nullptr;

@@ -96,10 +96,10 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits)
         FVoxelGrid& TargetGrid = SubGrids.FindOrAdd(ChunkPosition);
         if (TargetGrid.GridSize == 0)
         {
-            TargetGrid.Initialize(VOXEL_CHUNK_SIZE);
+            TargetGrid.Initialize(VOXEL_GRID_SIZE);
         }
 
-        FIntVector LocalPosition = Edit.Key - (ChunkPosition * static_cast<int>(VOXEL_CHUNK_SIZE));
+        FIntVector LocalPosition = Edit.Key - (ChunkPosition * static_cast<int>(VOXEL_GRID_SIZE));
         TargetGrid.SetVoxel(LocalPosition, Edit.Value);
     }
 

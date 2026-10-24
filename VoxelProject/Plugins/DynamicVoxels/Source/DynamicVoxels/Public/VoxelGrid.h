@@ -12,6 +12,7 @@ struct DYNAMICVOXELS_API FVoxelGrid
 {
     GENERATED_BODY()
 
+public:
     uint32 GridSize = 0;
 
     TArray<uint8> Data;
@@ -20,6 +21,12 @@ struct DYNAMICVOXELS_API FVoxelGrid
     TArray<uint64> XZPlaneBitData;
 
     uint32 BitGridSize = 0;
+
+    UPROPERTY()
+    UMaterialInstanceDynamic* MaterialInstance = nullptr;
+
+    UPROPERTY()
+    UTexture2D* VoxelDataTexture = nullptr;
 
     void Initialize(uint32 InGridSize)
     {
@@ -32,6 +39,9 @@ struct DYNAMICVOXELS_API FVoxelGrid
         XYPlaneBitData.Init(0, BitGridSize * BitGridSize);
         XZPlaneBitData.Init(0, BitGridSize * BitGridSize);
     }
+
+    void CreateMaterialInstance(uint32 VoxelSize, UMaterial* BaseMaterial, UTexture2DArray* VoxelTextures);
+    void UpdateMaterialData();
 
     inline int GetBitPlaneIndex(int PosX, int PosY) const
     {

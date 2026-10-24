@@ -3,7 +3,6 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "PhysicsEngine/BoxElem.h"
 #include "PhysicsEngine/ConvexElem.h"
-#include "Engine/Texture2DArray.h"
 
 // Which voxel meshing approach to use
 // 0 = 1D Greedy Meshing
@@ -40,34 +39,37 @@ void AVoxelBase::BeginPlay() { Super::BeginPlay(); }
 
 void AVoxelBase::RegenerateMesh()
 {
-#if MESHING_METHOD == 0
+    if (!ProceduralMesh)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: ProceduralMesh component missing!"), *GetName());
+        return;
+    }
+        
+    ProceduralMesh->ClearAllMeshSections();
+
+    int MeshSectionIndex = 0;
+
     for (const auto& SubGrid : SubGrids)
     {
         if (SubGrid.Value.GridSize == 0) continue;
+
+#if MESHING_METHOD == 0
         CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::POSITIVE_X);
         CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::NEGATIVE_X);
         CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::POSITIVE_Y);
         CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::NEGATIVE_Y);
         CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::POSITIVE_Z);
         CreateMeshPlaneGreedy1D(SubGrid, EFaceDirection::NEGATIVE_Z);
-    }
 #elif MESHING_METHOD == 1
-    for (const auto& SubGrid : SubGrids)
-    {
-        if (SubGrid.Value.GridSize == 0) continue;
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::POSITIVE_X);
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::NEGATIVE_X);
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::POSITIVE_Y);
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::NEGATIVE_Y);
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::POSITIVE_Z);
         CreateMeshPlaneGreedy(SubGrid, EFaceDirection::NEGATIVE_Z);
-    }
 #endif
-
-    if (ProceduralMesh)
-    {
-        ProceduralMesh->ClearAllMeshSections();
-        ProceduralMesh->CreateMeshSection_LinearColor(0,
+ 
+        ProceduralMesh->CreateMeshSection_LinearColor(MeshSectionIndex,
                                                       Vertices,
                                                       Indices,
                                                       Normals,
@@ -75,57 +77,18 @@ void AVoxelBase::RegenerateMesh()
                                                       TArray<FLinearColor>(),
                                                       TArray<FProcMeshTangent>(),
                                                       false);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: ProceduralMesh component missing!"), *GetName());
-    }
+        // Set Material
+        if (SubGrid.Value.MaterialInstance)
+        {
+            ProceduralMesh->SetMaterial(MeshSectionIndex, SubGrid.Value.MaterialInstance);
+        }
 
-    Vertices.Empty();
-    Normals.Empty();
-    Indices.Empty();
-    IndexCount = 0;
-}
+        MeshSectionIndex++;
 
-void AVoxelBase::CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures)
-{
-    // Create material and texture if they don't exist yet
-    if (baseMaterial && voxelTextures && MaterialDataCreated == false)
-    {
-        // Create texture to store voxel data
-        uint32 textureHeight = VoxelGrid.Data.Num() / VoxelGrid.GridSize;
-
-        VoxelDataTexture = UTexture2D::CreateTransient(VoxelGrid.GridSize, textureHeight, PF_R8);
-        VoxelDataTexture->CompressionSettings = TextureCompressionSettings::TC_Grayscale;
-        VoxelDataTexture->SRGB = 0;
-        VoxelDataTexture->Filter = TextureFilter::TF_Nearest;
-#ifndef UE_BUILD_DEBUG
-        VoxelDataTexture->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
-        VoxelDataTexture->CompressionNone = 1;
-#endif  // !UE_BUILD_DEBUG
-
-        // Upload voxel data to texture
-        void* TargetTextureData = VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-        FMemory::Memcpy(TargetTextureData, VoxelGrid.Data.GetData(), VoxelGrid.Data.Num());
-
-        VoxelDataTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
-        VoxelDataTexture->UpdateResource();
-
-        // Create material instance for chunk mesh
-        MaterialInstance = UMaterialInstanceDynamic::Create(baseMaterial, this);
-        MaterialInstance->SetTextureParameterValue(TEXT("VoxelTextures"), voxelTextures);
-        MaterialInstance->SetTextureParameterValue(TEXT("VoxelDataTexture"), VoxelDataTexture);
-
-        MaterialInstance->SetScalarParameterValue(TEXT("VoxelSize"), static_cast<float>(VoxelSize));
-        MaterialInstance->SetScalarParameterValue(TEXT("VoxelDataSize"), static_cast<float>(VoxelGrid.GridSize));
-
-        ProceduralMesh->SetMaterial(0, MaterialInstance);
-
-        MaterialDataCreated = true;
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Missing material data for chunk, cannot assign material!"));
+        Vertices.Empty();
+        Normals.Empty();
+        Indices.Empty();
+        IndexCount = 0;
     }
 }
 
@@ -165,9 +128,9 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(const TPair<FIntVector, FVoxelGrid>& Su
     const TArray<uint64>* OriginPlaneBitData = &Grid.XYPlaneBitData;
     if (UsingXZPlane) OriginPlaneBitData = &Grid.XZPlaneBitData;
 
-    for (int y = 0; y < static_cast<int>(VOXEL_CHUNK_SIZE); ++y)
+    for (int y = 0; y < static_cast<int>(VOXEL_GRID_SIZE); ++y)
     {
-        for (int x = 0; x < static_cast<int>(VOXEL_CHUNK_SIZE); ++x)
+        for (int x = 0; x < static_cast<int>(VOXEL_GRID_SIZE); ++x)
         {
             int CurIndex = Grid.GetBitPlaneIndex(x, y);
             int FrontIndex = Grid.GetBitPlaneIndex(x + Normal.X, y + Normal.Y);
@@ -180,7 +143,7 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(const TPair<FIntVector, FVoxelGrid>& Su
             // No faces can be generated anywhere, so continue
             if (CanHaveFaceColumn == 0) continue;
 
-            for (uint32 z = 0; z < VOXEL_CHUNK_SIZE;)
+            for (uint32 z = 0; z < VOXEL_GRID_SIZE;)
             {
                 uint64 Shifted = CanHaveFaceColumn >> z;
 
@@ -193,7 +156,7 @@ void AVoxelBase::CreateMeshPlaneGreedy1D(const TPair<FIntVector, FVoxelGrid>& Su
                 {
                     uint32 Leading1s = FMath::CountTrailingZeros64(~Shifted);
 
-                    FIntVector SubGridOffset = SubGrid.Key * static_cast<int>(VOXEL_CHUNK_SIZE);
+                    FIntVector SubGridOffset = SubGrid.Key * static_cast<int>(VOXEL_GRID_SIZE);
 
                     FVector VoxelPos;
                     if (UsingXZPlane)
@@ -256,9 +219,9 @@ void AVoxelBase::CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubG
     TempPlaneBitData.Init(0, Grid.BitGridSize * Grid.BitGridSize);
     memcpy(TempPlaneBitData.GetData(), OriginPlaneBitData->GetData(), Grid.BitGridSize * Grid.BitGridSize * sizeof(uint64));
 
-    for (int y = 0; y < static_cast<int>(VOXEL_CHUNK_SIZE); ++y)
+    for (int y = 0; y < static_cast<int>(VOXEL_GRID_SIZE); ++y)
     {
-        for (int x = 0; x < static_cast<int>(VOXEL_CHUNK_SIZE); ++x)
+        for (int x = 0; x < static_cast<int>(VOXEL_GRID_SIZE); ++x)
         {
             int CurIndex = Grid.GetBitPlaneIndex(x, y);
             int FrontIndex = Grid.GetBitPlaneIndex(x + Normal.X, y + Normal.Y);
@@ -271,7 +234,7 @@ void AVoxelBase::CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubG
             // No faces can be generated anywhere, so continue
             if (CanHaveFaceColumn == 0) continue;
 
-            for (uint32 z = 0; z < VOXEL_CHUNK_SIZE;)
+            for (uint32 z = 0; z < VOXEL_GRID_SIZE;)
             {
                 uint64 Shifted = CanHaveFaceColumn >> z;
 
@@ -291,7 +254,7 @@ void AVoxelBase::CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubG
                     // Creates n 1-bits at least significant bits, where n = Leading1s
                     uint64 CheckMask = ((1ui64 << Leading1s) - 1);
 
-                    for (uint32 i = 1; i <= VOXEL_CHUNK_SIZE; ++i)
+                    for (uint32 i = 1; i <= VOXEL_GRID_SIZE; ++i)
                     {
                         FIntVector2 LoopPos;
                         switch (FaceDirection)
@@ -321,8 +284,8 @@ void AVoxelBase::CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubG
                         uint64 CheckShiftedMasked = CheckShifted & CheckMask;
 
                         // Check if face's width cannot be expanded anymore
-                        if (CheckShiftedMasked != CheckMask || x + LoopPos.X >= VOXEL_CHUNK_SIZE ||
-                            y + LoopPos.Y >= VOXEL_CHUNK_SIZE)
+                        if (CheckShiftedMasked != CheckMask || x + LoopPos.X >= VOXEL_GRID_SIZE ||
+                            y + LoopPos.Y >= VOXEL_GRID_SIZE)
                         {
                             XScale = i;
                             break;
@@ -337,7 +300,7 @@ void AVoxelBase::CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubG
 
                     if (XScale > 0)
                     {
-                        FIntVector SubGridOffset = SubGrid.Key * static_cast<int>(VOXEL_CHUNK_SIZE);
+                        FIntVector SubGridOffset = SubGrid.Key * static_cast<int>(VOXEL_GRID_SIZE);
 
                         FVector VoxelPos;
                         if (UsingXZPlane)
@@ -468,7 +431,7 @@ void AVoxelBase::CreateCollision()
     {
         if (SubGrid.Value.GridSize == 0) continue;
         const FVoxelGrid& Grid = SubGrid.Value;
-        const FVector WorldOffset = FVector(SubGrid.Key * static_cast<int>(VOXEL_CHUNK_SIZE)) * static_cast<double>(VoxelSize);
+        const FVector WorldOffset = FVector(SubGrid.Key * static_cast<int>(VOXEL_GRID_SIZE)) * static_cast<double>(VoxelSize);
 
         if (CollisionType == EVoxelCollisionType::MaxIS || CollisionType == EVoxelCollisionType::IS1)
         {
@@ -478,11 +441,11 @@ void AVoxelBase::CreateCollision()
         if (CollisionType == EVoxelCollisionType::ConvexHull)
         {
             TArray<FVector> HullPoints;
-            for (uint32 z = 0; z < VOXEL_CHUNK_SIZE; ++z)
+            for (uint32 z = 0; z < VOXEL_GRID_SIZE; ++z)
             {
-                for (uint32 y = 0; y < VOXEL_CHUNK_SIZE; ++y)
+                for (uint32 y = 0; y < VOXEL_GRID_SIZE; ++y)
                 {
-                    for (uint32 x = 0; x < VOXEL_CHUNK_SIZE; ++x)
+                    for (uint32 x = 0; x < VOXEL_GRID_SIZE; ++x)
                     {
                         if (Grid.GetVoxel(FIntVector3(x, y, z)) == 0) continue;
                         const bool bSurface =
