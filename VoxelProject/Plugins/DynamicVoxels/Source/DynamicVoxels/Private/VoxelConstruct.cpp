@@ -8,23 +8,9 @@ void AVoxelConstruct::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
-}
-
-TArray<AVoxelConstruct::FVoxelGridInstance> AVoxelConstruct::BuildGridInstances() const
-{
-    TArray<FVoxelGridInstance> GridInstances;
-    GridInstances.Reserve(SubGrids.Num());
-
-    constexpr int32 SubGridSize = 32;
-    for (const TPair<FIntVector, FVoxelGrid>& Entry : SubGrids)
-    {
-        GridInstances.Add({Entry.Key * SubGridSize, &Entry.Value});
-    }
-
-    return GridInstances;
+    RegenerateMesh();
+    CreateCollision();
+    MarkSubGridsAsNotDirty();
 }
 
 void AVoxelConstruct::GenerateVoxelData()
@@ -33,6 +19,7 @@ void AVoxelConstruct::GenerateVoxelData()
 
     FVoxelGrid& Grid = SubGrids.FindOrAdd(FIntVector(0, 0, 0));
     Grid.Initialize(SubGridSize);
+    Grid.CreateMaterialInstance(VoxelSize, BaseMaterial, VoxelTextures);
 
     const float Center = (float)SubGridSize * 0.5f;
 
@@ -40,8 +27,8 @@ void AVoxelConstruct::GenerateVoxelData()
     {
         for (uint32 x = 0; x < SubGridSize; x++)
         {
-            double perlin2DVal = FMath::PerlinNoise2D(FVector2D((float)x, (float)y) / 160.0) * 0.5 + 0.5;
-            float terrainHeight = (float)(perlin2DVal * perlin2DVal * 40.0 + 24.0);
+            double perlin2DVal = FMath::PerlinNoise2D(FVector2D((float)x, (float)y) / 32.0) * 0.5 + 0.5;
+            float terrainHeight = (float)(perlin2DVal * perlin2DVal * 8.0 + 24.0);
 
             for (uint32 z = 0; z < SubGridSize; z++)
             {
@@ -50,32 +37,45 @@ void AVoxelConstruct::GenerateVoxelData()
                 uint8 blockType = 1;  // Stone
                 if (terrainHeight - (float)z < 3.0f)
                     blockType = 2;  // Grass
-                else if (terrainHeight - (float)z < 6.0f)
+                else if (terrainHeight - (float)z < 9.0f)
                     blockType = 3;  // Dirt
 
-                float perlinValue = FMath::PerlinNoise3D(FVector((float)x, (float)y, (float)z) / 16.0f);
-                float falloff = (Center - (float)z) / (Center * 0.5f);
-                perlinValue += falloff;
+// Wether to add caves to voxel construct
+#if 0
+                float perlinValue = FMath::PerlinNoise3D(FVector((float)x, (float)y, (float)z) / 8.0f);
+#else
+                float perlinValue = 1.0f;
+#endif
 
-                if (perlinValue > 0.0f)
+                if (perlinValue > -0.2f)
                 {
                     Grid.SetVoxel(FIntVector3(x, y, z), blockType);
                 }
             }
         }
     }
+
+    // Update material data after doing the terrain generation
+    Grid.UpdateMaterialData();
 }
 
-void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType, bool isStatic)
+void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType,
+                                bool isStatic,
+                                uint32 InVoxelSize,
+                                UMaterial* InBaseMaterial,
+                                UTexture2DArray* InVoxelTextures)
 {
     m_static = isStatic;
     CollisionType = NewCollisionType;
 
-    GenerateVoxelData();
+    VoxelSize = InVoxelSize;
+    BaseMaterial = InBaseMaterial;
+    VoxelTextures = InVoxelTextures;
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    GenerateVoxelData();
+    RegenerateMesh();
+    CreateCollision();
+    MarkSubGridsAsNotDirty();
 
     if (ProceduralMesh)
     {
@@ -86,16 +86,24 @@ void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType, bool isSta
 
 void AVoxelConstruct::InitVoxel(EVoxelCollisionType NewCollisionType,
                                 const TMap<FIntVector, FVoxelGrid>& InSubGrids,
-                                bool isStatic)
+                                bool isStatic,
+                                int32 InVoxelSize,
+                                UMaterial* InBaseMaterial,
+                                UTexture2DArray* InVoxelTextures)
 {
     m_static = isStatic;
     CollisionType = NewCollisionType;
 
+    VoxelSize = InVoxelSize;
+    BaseMaterial = InBaseMaterial;
+    VoxelTextures = InVoxelTextures;
+
     SubGrids = InSubGrids;
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    UpdateMaterialDirtySubGrids();
+    RegenerateMesh();
+    CreateCollision();
+    MarkSubGridsAsNotDirty();
 
     if (ProceduralMesh)
     {
@@ -114,17 +122,19 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits)
         FVoxelGrid& TargetGrid = SubGrids.FindOrAdd(ChunkPosition);
         if (TargetGrid.GridSize == 0)
         {
-            TargetGrid.Initialize(VOXEL_CHUNK_SIZE);
+            TargetGrid.Initialize(VOXEL_GRID_SIZE);
+            TargetGrid.CreateMaterialInstance(VoxelSize, BaseMaterial, VoxelTextures);
         }
 
-        FIntVector LocalPosition = Edit.Key - (ChunkPosition * static_cast<int>(VOXEL_CHUNK_SIZE));
+        FIntVector LocalPosition = Edit.Key - (ChunkPosition * static_cast<int>(VOXEL_GRID_SIZE));
         TargetGrid.SetVoxel(LocalPosition, Edit.Value);
     }
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    UpdateMaterialDirtySubGrids();
+    RegenerateMesh();
+    CreateCollision();
     OnVoxelsChanged();
+    MarkSubGridsAsNotDirty();
 }
 
 FIntVector AVoxelConstruct::WorldToGridPosition(const FVector& Position)
@@ -176,6 +186,7 @@ void AVoxelConstruct::MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSu
                     if (TargetGrid.GridSize == 0)
                     {
                         TargetGrid.Initialize(SubGridSize);
+                        TargetGrid.CreateMaterialInstance(VoxelSize, BaseMaterial, VoxelTextures);
                     }
 
                     TargetGrid.SetVoxel(FIntVector3(TargetLocalX, TargetLocalY, TargetLocalZ), Value);
@@ -184,10 +195,11 @@ void AVoxelConstruct::MergeVoxelData(const TMap<FIntVector, FVoxelGrid>& OtherSu
         }
     }
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    UpdateMaterialDirtySubGrids();
+    RegenerateMesh();
+    CreateCollision();
     OnVoxelsChanged();
+    MarkSubGridsAsNotDirty();
 }
 
 void AVoxelConstruct::AttachSelfTo(AVoxelConstruct* Target,
@@ -353,6 +365,7 @@ void AVoxelConstruct::OnVoxelsChanged()
             if (TargetGrid.GridSize == 0)
             {
                 TargetGrid.Initialize(SubGridSize);
+                TargetGrid.CreateMaterialInstance(VoxelSize, BaseMaterial, VoxelTextures);
             }
 
             // Preserves the actual block type (stone/grass/dirt, ...)
@@ -374,10 +387,10 @@ void AVoxelConstruct::OnVoxelsChanged()
         AVoxelConstruct* NewPiece = GetWorld()->SpawnActor<AVoxelConstruct>(GetClass(), GetActorTransform());
         if (NewPiece)
         {
-            NewPiece->InitVoxel(CollisionType, PieceSubGrids, /*bIsWorld=*/false);
+            NewPiece->InitVoxel(CollisionType, PieceSubGrids, /*bIsWorld=*/false, VoxelSize, BaseMaterial, VoxelTextures);
         }
     }
 
     TMap<FIntVector, FVoxelGrid> LargestSubGrids = BuildSubGridsForIsland(Islands[LargestIndex]);
-    InitVoxel(CollisionType, LargestSubGrids, m_static);
+    InitVoxel(CollisionType, LargestSubGrids, m_static, VoxelSize, BaseMaterial, VoxelTextures);
 }

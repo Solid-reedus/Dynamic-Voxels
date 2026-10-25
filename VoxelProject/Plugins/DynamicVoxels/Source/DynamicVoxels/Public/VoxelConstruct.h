@@ -15,10 +15,19 @@ public:
     AVoxelConstruct();
 
     // init voxel construct randomly
-    void InitVoxel(EVoxelCollisionType NewCollisionType, bool isStatic);
+    void InitVoxel(EVoxelCollisionType NewCollisionType,
+                   bool isStatic,
+                   uint32 InVoxelSize,
+                   UMaterial* InBaseMaterial,
+                   UTexture2DArray* InVoxelTextures);
 
     // init voxel construct based on grid data
-    void InitVoxel(EVoxelCollisionType NewCollisionType, const TMap<FIntVector, FVoxelGrid>& InSubGrids, bool isStatic);
+    void InitVoxel(EVoxelCollisionType NewCollisionType,
+                   const TMap<FIntVector, FVoxelGrid>& InSubGrids,
+                   bool isStatic,
+                   int32 InVoxelSize,
+                   UMaterial* InBaseMaterial,
+                   UTexture2DArray* InVoxelTextures);
 
     virtual void ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits) override;
     virtual FIntVector WorldToGridPosition(const FVector& Position) override;
@@ -37,9 +46,12 @@ private:
 
     void OnVoxelsChanged();
 
-    TArray<FVoxelGridInstance> BuildGridInstances() const;
-
-    TMap<FIntVector, FVoxelGrid> SubGrids;
-
     bool m_static = false;
+
+    // Keeping track of these objects for when new sub grids are created
+    UPROPERTY()
+    UMaterial* BaseMaterial;
+
+    UPROPERTY()
+    UTexture2DArray* VoxelTextures;
 };

@@ -6,16 +6,11 @@
 // Sets default values
 AVoxelChunk::AVoxelChunk() { PrimaryActorTick.bCanEverTick = false; }
 
-TArray<AVoxelBase::FVoxelGridInstance> AVoxelChunk::BuildGridInstances() const
-{
-    return {FVoxelGridInstance{FIntVector::ZeroValue, &Grid}};
-}
-
 void AVoxelChunk::ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits)
 {
     if (Edits.IsEmpty()) return;
 
-    m_world->ApplyVoxelEdit(Edits);
+    VoxelWorld->ApplyVoxelEdit(Edits);
 }
 
 FIntVector AVoxelChunk::WorldToGridPosition(const FVector& Position)
@@ -28,47 +23,89 @@ FIntVector AVoxelChunk::WorldToGridPosition(const FVector& Position)
     return Final;
 }
 
-void AVoxelChunk::InitializeChunk(uint32 voxelSize,
-                                  UMaterial* baseMaterial,
-                                  UTexture2DArray* voxelTextures,
-                                  AVoxelWorld* world,
-                                  FIntVector chunkPos)
+void AVoxelChunk::InitializeChunk(uint32 InVoxelSize,
+                                  UMaterial* InBaseMaterial,
+                                  UTexture2DArray* InVoxelTextures,
+                                  AVoxelWorld* InVoxelWorld)
 {
-    VoxelSize = voxelSize;
-    m_world = world;
-    m_chunkPos = chunkPos;
+    VoxelSize = InVoxelSize;
+    VoxelWorld = InVoxelWorld;
 
-    GenerateVoxelData(voxelSize);
-    CreateMaterialInstance(Grid, baseMaterial, voxelTextures);
-    if (!IsChunkUniform())
+    // Create all subgrids
+    SubGrids.Reserve(static_cast<int>(VOXEL_CHUNK_HEIGHT));
+
+    for (int i = 0; i < static_cast<int>(VOXEL_CHUNK_HEIGHT); i++)
     {
-        const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-        RegenerateMesh(GridInstances);
-        CreateCollision(GridInstances);
+        FVoxelGrid& Grid = SubGrids.Add(FIntVector(0, 0, i));
+        Grid.Initialize(VOXEL_GRID_SIZE);
+        Grid.CreateMaterialInstance(InVoxelSize, InBaseMaterial, InVoxelTextures);
+
+        SubGridsArray.Add(&Grid);
     }
+
+    GenerateVoxelData(VoxelSize);
+
+    RegenerateMesh();
+    CreateCollision();
+    MarkSubGridsAsNotDirty();
 }
 
 void AVoxelChunk::ApplyVoxelEditLocal(const TMap<FIntVector, uint8>& Edits)
 {
     // Chunk position as the voxel grid
-    FIntVector ChunkVoxelGridPos = m_chunkPos * VOXEL_CHUNK_SIZE;
+    FIntVector ChunkVoxelGridPos = ChunkPosition * VOXEL_GRID_SIZE;
 
     for (const auto& Edit : Edits)
     {
         FIntVector LocalPos = Edit.Key - ChunkVoxelGridPos;
 
-        int PosMin = LocalPos.GetMin();
-        int PosMax = LocalPos.GetMax();
+        int PosMin = FMath::Min(LocalPos.X, LocalPos.Y);
+        int PosMax = FMath::Max(LocalPos.X, LocalPos.Y);
 
-        if (PosMax > static_cast<int>(Grid.GridSize) || PosMin < -1)
+        if (PosMax > static_cast<int>(VOXEL_GRID_SIZE) || PosMin < -1)
             continue;
 
-        Grid.SetVoxel(LocalPos, Edit.Value);
+        SetVoxelLocal(LocalPos, Edit.Value);
     }
 
-    const TArray<FVoxelGridInstance> GridInstances = BuildGridInstances();
-    RegenerateMesh(GridInstances);
-    CreateCollision(GridInstances);
+    UpdateMaterialDirtySubGrids();
+    RegenerateMesh();
+    CreateCollision();
+    MarkSubGridsAsNotDirty();
+}
+
+void AVoxelChunk::SetVoxelLocal(const FIntVector& VoxelPos, uint8 Value)
+{
+    int SubGridPosZ = AVoxelWorld::GridToChunkPosition(VoxelPos).Z;
+    FIntVector LocalPosition = VoxelPos;
+    LocalPosition.Z -= (SubGridPosZ * static_cast<int>(VOXEL_GRID_SIZE));
+
+    // Handle if set voxel is at sub grid border
+    if (LocalPosition.Z == 0 && SubGridPosZ > 0 && SubGridPosZ <= static_cast<int>(VOXEL_CHUNK_HEIGHT))
+    {
+        FVoxelGrid* SecondGrid = SubGridsArray[SubGridPosZ - 1];
+
+        FIntVector SecondPos = LocalPosition;
+        SecondPos.Z = static_cast<int>(VOXEL_GRID_SIZE);
+
+        SecondGrid->SetVoxel(SecondPos, Value);
+    }
+    else if (LocalPosition.Z == static_cast<int>(VOXEL_GRID_SIZE) - 1 && SubGridPosZ >= -1 &&
+             SubGridPosZ < static_cast<int>(VOXEL_CHUNK_HEIGHT) - 1)
+    {
+        FVoxelGrid* SecondGrid = SubGridsArray[SubGridPosZ + 1];
+
+        FIntVector SecondPos = LocalPosition;
+        SecondPos.Z = -1;
+
+        SecondGrid->SetVoxel(SecondPos, Value);
+    }
+
+    if (SubGridPosZ >= 0 && SubGridPosZ < static_cast<int>(VOXEL_CHUNK_HEIGHT))
+    {
+        FVoxelGrid* CurGrid = SubGridsArray[SubGridPosZ];
+        CurGrid->SetVoxel(LocalPosition, Value);
+    }
 }
 
 // Called when the game starts or when spawned
@@ -82,16 +119,12 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
                                                static_cast<int32>(actorPosition.Z)) /
                                    voxelSize;
 
-    m_chunkPosition = relativePosition / VOXEL_CHUNK_SIZE;
-
-    Grid.Initialize(VOXEL_CHUNK_SIZE);
-
-    bool containsSolid = false;
+    ChunkPosition = relativePosition / VOXEL_GRID_SIZE;
 
     // Basic terrain generation, will be optimized and improved in the future
-    for (int y = -1; y <= static_cast<int>(VOXEL_CHUNK_SIZE); y++)
+    for (int y = -1; y <= static_cast<int>(VOXEL_GRID_SIZE); y++)
     {
-        for (int x = -1; x <= static_cast<int>(VOXEL_CHUNK_SIZE); x++)
+        for (int x = -1; x <= static_cast<int>(VOXEL_GRID_SIZE); x++)
         {
             FIntVector2 topDownPosition = FIntVector2(x + relativePosition.X, y + relativePosition.Y);
 
@@ -111,7 +144,7 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
             double BlockChoice = FMath::RandRange(0.0, 1.0);
             BlockChoice += perlin2DValDetail * 3;
 
-            for (int z = -1; z <= static_cast<int>(VOXEL_CHUNK_SIZE); z++)
+            for (int z = -1; z <= static_cast<int>(VOXEL_GRID_SIZE * VOXEL_CHUNK_HEIGHT); z++)
             {
                 FIntVector3 worldPosition = FIntVector3(x, y, z) + relativePosition;
                 float caveValue = FMath::PerlinNoise3D(FVector(worldPosition) / 16.0);
@@ -121,11 +154,11 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
                     float falloff = static_cast<float>(FMath::Abs(z - terrainValue)) * 0.08;
                     float applied = caveValue - falloff;
 
-                    if (applied > 0.5f)
-                    {
-                        Grid.SetVoxel(FIntVector3(x, y, z), 7);  // Cobble
-                        containsSolid = true;
-                    }
+                    if (applied > 0.5f) SetVoxelLocal(FIntVector3(x, y, z), 7);  // Cobble
+                }
+                else if (z >= terrainValue + 10)
+                {
+                    break;
                 }
                 else
                 {
@@ -145,18 +178,15 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
                     float falloff = (128.0f - static_cast<float>(worldPosition.Z)) / 64.0f - 1.0f;
                     float applied = caveValue + falloff;
 
-                    if (applied > -0.2f)
-                    {
-                        Grid.SetVoxel(FIntVector3(x, y, z), blockType);
-                        containsSolid = true;
-                    }
+                    if (applied > -0.2f) SetVoxelLocal(FIntVector3(x, y, z), blockType);
                 }
             }
         }
     }
 
-    if (!containsSolid)
+    // Update material data for all grids
+    for (FVoxelGrid* Grid : SubGridsArray)
     {
-        m_isChunkUniform = true;
+        Grid->UpdateMaterialData();
     }
 }

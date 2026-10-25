@@ -12,10 +12,12 @@ class DYNAMICVOXELS_API AVoxelChunk : public AVoxelBase
     GENERATED_BODY()
 
 public:
+    // Chunk height in grids
+    static constexpr uint32 VOXEL_CHUNK_HEIGHT = 4;
+
     AVoxelChunk();
 
-    const FIntVector& GetChunkPosition() const { return m_chunkPosition; }
-    bool IsChunkUniform() const { return m_isChunkUniform; }
+    const FIntVector& GetChunkPosition() const { return ChunkPosition; }
 
     virtual void ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits) override;
     virtual FIntVector WorldToGridPosition(const FVector& Position) override;
@@ -23,31 +25,27 @@ public:
 protected:
     friend class AVoxelWorld;
 
-    void InitializeChunk(uint32 voxelSize,
-                         UMaterial* baseMaterial,
-                         UTexture2DArray* voxelTextures,
-                         AVoxelWorld* world,
-                         FIntVector chunkPos);
-
+    void InitializeChunk(uint32 InVoxelSize,
+                         UMaterial* InBaseMaterial,
+                         UTexture2DArray* InVoxelTextures,
+                         AVoxelWorld* InVoxelWorld);
 
     void ApplyVoxelEditLocal(const TMap<FIntVector, uint8>& Edits);
+
+    // Correctly sets a voxel across multiple grids
+    void SetVoxelLocal(const FIntVector& VoxelPos, uint8 Value);
 
     virtual void BeginPlay() override;
 
 private:
-    FIntVector m_chunkPosition;
-    bool m_isChunkUniform = false;
+    FIntVector ChunkPosition;
+
+    UPROPERTY()
+    AVoxelWorld* VoxelWorld = nullptr;
+
+    // TODO: Might be unsafe, need to investigate
+    // Store pointers to the subgrids as flat array for faster access
+    TArray<FVoxelGrid*> SubGridsArray;
 
     void GenerateVoxelData(uint32 voxelSize);
-
-    TArray<FVoxelGridInstance> BuildGridInstances() const;
-
-    UPROPERTY()
-    FVoxelGrid Grid;
-
-    UPROPERTY()
-    AVoxelWorld* m_world = nullptr;
-
-    // Chunk position in chunk space
-    FIntVector m_chunkPos;
 };

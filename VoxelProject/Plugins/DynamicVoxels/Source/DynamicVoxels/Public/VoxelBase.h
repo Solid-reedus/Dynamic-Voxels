@@ -28,13 +28,12 @@ class DYNAMICVOXELS_API AVoxelBase : public AActor
     GENERATED_BODY()
 
 public:
-    static constexpr uint32 VOXEL_CHUNK_SIZE = 32;
+    static constexpr uint32 VOXEL_GRID_SIZE = 32;
 
-    UPROPERTY(VisibleAnywhere, Category = "Voxel")
+    UPROPERTY()
     EVoxelCollisionType CollisionType = EVoxelCollisionType::ThreeGDM;
 
-    // migh need to make this a normal property, as all voxels actors need to be same size
-    UPROPERTY(VisibleAnywhere, Category = "Voxel")
+    UPROPERTY()
     uint32 VoxelSize = 100;
 
     AVoxelBase();
@@ -49,36 +48,22 @@ public:
     void ApplyVoxelEditArray(const TArray<FIntVector>& Positions, uint8 VoxelType);
 
 protected:
-    virtual void BeginPlay() override;
-
-    /*
-        a single voxel grid and its position, so one actor can be made up
-        of more than one grid instead of just one
-    */
-    struct FVoxelGridInstance
-    {
-        FIntVector Offset;
-        const FVoxelGrid* Grid = nullptr;
-    };
-
-    void RegenerateMesh(const TArray<FVoxelGridInstance>& Grids);
-    void CreateMaterialInstance(const FVoxelGrid& VoxelGrid, UMaterial* baseMaterial, UTexture2DArray* voxelTextures);
-    void CreateCollision(const TArray<FVoxelGridInstance>& Grids);
-
     UPROPERTY()
     UProceduralMeshComponent* ProceduralMesh = nullptr;
 
     UPROPERTY()
-    UMaterialInstanceDynamic* MaterialInstance = nullptr;
+    TMap<FIntVector, FVoxelGrid> SubGrids;
 
-    UPROPERTY()
-    UTexture2D* VoxelDataTexture = nullptr;
+    virtual void BeginPlay() override;
+
+    void RegenerateMesh();
+    void CreateCollision();
+    void MarkSubGridsAsNotDirty();
+
+    // Update the material data for all dirty sub grids
+    void UpdateMaterialDirtySubGrids();
 
 private:
-    void CreateMeshPlaneGreedy1D(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection);
-    void CreateMeshPlaneGreedy(const FVoxelGridInstance& GridInstance, EFaceDirection FaceDirection);
-    inline void AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale);
-
     TArray<FVector> Vertices;
     TArray<FVector> Normals;
     TArray<int32> Indices;
@@ -86,5 +71,7 @@ private:
 
     TArray<uint64> TempPlaneBitData;
 
-    bool MaterialDataCreated = false;
+    void CreateMeshPlaneGreedy1D(const TPair<FIntVector, FVoxelGrid>& SubGrid, EFaceDirection FaceDirection);
+    void CreateMeshPlaneGreedy(const TPair<FIntVector, FVoxelGrid>& SubGrid, EFaceDirection FaceDirection);
+    inline void AddFace(const FVector& Position, EFaceDirection FaceDirection, const FVector2D& Scale);
 };
