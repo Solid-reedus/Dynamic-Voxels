@@ -27,8 +27,8 @@ void AVoxelConstruct::GenerateVoxelData()
     {
         for (uint32 x = 0; x < SubGridSize; x++)
         {
-            double perlin2DVal = FMath::PerlinNoise2D(FVector2D((float)x, (float)y) / 160.0) * 0.5 + 0.5;
-            float terrainHeight = (float)(perlin2DVal * perlin2DVal * 40.0 + 24.0);
+            double perlin2DVal = FMath::PerlinNoise2D(FVector2D((float)x, (float)y) / 32.0) * 0.5 + 0.5;
+            float terrainHeight = (float)(perlin2DVal * perlin2DVal * 8.0 + 24.0);
 
             for (uint32 z = 0; z < SubGridSize; z++)
             {
@@ -37,14 +37,17 @@ void AVoxelConstruct::GenerateVoxelData()
                 uint8 blockType = 1;  // Stone
                 if (terrainHeight - (float)z < 3.0f)
                     blockType = 2;  // Grass
-                else if (terrainHeight - (float)z < 6.0f)
+                else if (terrainHeight - (float)z < 9.0f)
                     blockType = 3;  // Dirt
 
-                float perlinValue = FMath::PerlinNoise3D(FVector((float)x, (float)y, (float)z) / 16.0f);
-                float falloff = (Center - (float)z) / (Center * 0.5f);
-                perlinValue += falloff;
+// Wether to add caves to voxel construct
+#if 0
+                float perlinValue = FMath::PerlinNoise3D(FVector((float)x, (float)y, (float)z) / 8.0f);
+#else
+                float perlinValue = 1.0f;
+#endif
 
-                if (perlinValue > 0.0f)
+                if (perlinValue > -0.2f)
                 {
                     Grid.SetVoxel(FIntVector3(x, y, z), blockType);
                 }
@@ -127,6 +130,7 @@ void AVoxelConstruct::ApplyVoxelEdit(const TMap<FIntVector, uint8>& Edits)
         TargetGrid.SetVoxel(LocalPosition, Edit.Value);
     }
 
+    UpdateMaterialDirtySubGrids();
     RegenerateMesh();
     CreateCollision();
     OnVoxelsChanged();

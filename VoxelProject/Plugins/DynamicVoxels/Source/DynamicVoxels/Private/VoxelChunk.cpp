@@ -68,6 +68,7 @@ void AVoxelChunk::ApplyVoxelEditLocal(const TMap<FIntVector, uint8>& Edits)
         SetVoxelLocal(LocalPos, Edit.Value);
     }
 
+    UpdateMaterialDirtySubGrids();
     RegenerateMesh();
     CreateCollision();
     MarkSubGridsAsNotDirty();
