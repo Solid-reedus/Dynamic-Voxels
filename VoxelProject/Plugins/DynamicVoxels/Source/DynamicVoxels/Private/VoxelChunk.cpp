@@ -26,7 +26,8 @@ FIntVector AVoxelChunk::WorldToGridPosition(const FVector& Position)
 void AVoxelChunk::InitializeChunk(uint32 InVoxelSize,
                                   UMaterial* InBaseMaterial,
                                   UTexture2DArray* InVoxelTextures,
-                                  AVoxelWorld* InVoxelWorld)
+                                  AVoxelWorld* InVoxelWorld,
+                                  UVoxelGenerationAsset* GenerationAsset)
 {
     VoxelSize = InVoxelSize;
     VoxelWorld = InVoxelWorld;
@@ -43,7 +44,7 @@ void AVoxelChunk::InitializeChunk(uint32 InVoxelSize,
         SubGridsArray.Add(&Grid);
     }
 
-    GenerateVoxelData(VoxelSize);
+    GenerateVoxelData(GenerationAsset);
 
     RegenerateMesh();
     CreateCollision();
@@ -111,17 +112,20 @@ void AVoxelChunk::SetVoxelLocal(const FIntVector& VoxelPos, uint8 Value)
 // Called when the game starts or when spawned
 void AVoxelChunk::BeginPlay() { Super::BeginPlay(); }
 
-void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
+void AVoxelChunk::GenerateVoxelData(UVoxelGenerationAsset* GenAsset)
 {
-    FVector actorPosition = GetActorLocation();
-    FIntVector3 relativePosition = FIntVector3(static_cast<int32>(actorPosition.X),
-                                               static_cast<int32>(actorPosition.Y),
-                                               static_cast<int32>(actorPosition.Z)) /
-                                   voxelSize;
+    if (!GenAsset) return;
 
-    ChunkPosition = relativePosition / VOXEL_GRID_SIZE;
+    FVector ActorPosition = GetActorLocation();
+    FIntVector3 RelativePosition = FIntVector3(static_cast<int32>(ActorPosition.X),
+                                               static_cast<int32>(ActorPosition.Y),
+                                               static_cast<int32>(ActorPosition.Z)) /
+                                   VoxelSize;
+
+    ChunkPosition = RelativePosition / VOXEL_GRID_SIZE;
 
     // Basic terrain generation, will be optimized and improved in the future
+    /*
     for (int y = -1; y <= static_cast<int>(VOXEL_GRID_SIZE); y++)
     {
         for (int x = -1; x <= static_cast<int>(VOXEL_GRID_SIZE); x++)
@@ -183,7 +187,91 @@ void AVoxelChunk::GenerateVoxelData(uint32 voxelSize)
             }
         }
     }
+    */
 
+    for (int y = -1; y <= static_cast<int>(VOXEL_GRID_SIZE); ++y)
+    {
+        for (int x = -1; x <= static_cast<int>(VOXEL_GRID_SIZE); ++x)
+        {
+            FVector2D VoxelPosition2D = FVector2D(x + RelativePosition.X, y + RelativePosition.Y);
+
+            float BiomeValue = FMath::PerlinNoise2D(VoxelPosition2D / GenAsset->BiomeScale) * 0.5f + 0.5f;
+            float BiomeValueDetail = FMath::PerlinNoise2D(VoxelPosition2D / (GenAsset->BiomeScale * 0.5f)) * 0.5f + 0.5f;
+            BiomeValue = BiomeValue * 0.7f + BiomeValueDetail * 0.3f;
+
+            float TerrainValue = FMath::PerlinNoise2D(VoxelPosition2D / GenAsset->TerrainNoiseScale) * 0.5f + 0.5f;
+            float DetailValue = FMath::PerlinNoise2D(VoxelPosition2D / GenAsset->DetailNoiseScale) * 0.5f + 0.5f;
+
+            float TerrainHeight = 0.0f;
+            TArray<FTerrainLayer>* TerrainLayers = nullptr;
+
+            if (BiomeValue < 0.5f)
+            {
+                TerrainHeight = GenAsset->B1BaseTerrainHeight + TerrainValue * GenAsset->B1TerrainNoiseAmplitude +
+                                      DetailValue * GenAsset->B1DetailNoiseAmplitude;
+
+                TerrainLayers = &GenAsset->B1TerrainLayers;
+            }
+            else
+            {
+                TerrainHeight = GenAsset->B2BaseTerrainHeight + TerrainValue * GenAsset->B2TerrainNoiseAmplitude +
+                                      DetailValue * GenAsset->B2DetailNoiseAmplitude;
+
+                TerrainLayers = &GenAsset->B2TerrainLayers;
+
+                if (GenAsset->BiomeBlending > 0.0f)
+                {
+                    float TerrainHeight2 = GenAsset->B1BaseTerrainHeight + TerrainValue * GenAsset->B1TerrainNoiseAmplitude +
+                                           DetailValue * GenAsset->B1DetailNoiseAmplitude;
+
+                    float BiomeBorderLerp = FMath::Clamp((BiomeValue - 0.5f) / GenAsset->BiomeBlending, 0.0f, 1.0f);
+                    BiomeBorderLerp = FMath::SmoothStep(0.0f, 1.0f, BiomeBorderLerp);
+                    TerrainHeight = FMath::Lerp(TerrainHeight2, TerrainHeight, BiomeBorderLerp);
+                }
+            }
+
+            float BlockChoice = FMath::RandRange(0.0f, 1.0f);
+
+            int TerrainHeightInt = static_cast<int>(TerrainHeight);
+
+            for (int z = -1; z <= static_cast<int>(VOXEL_GRID_SIZE * VOXEL_CHUNK_HEIGHT); z++)
+            {
+                if (z >= TerrainHeightInt) break;
+
+                // Perform caves
+                float CaveValue = FMath::PerlinNoise3D(
+                    FVector(x + RelativePosition.X, y + RelativePosition.Y, z + RelativePosition.Z) / GenAsset->CaveNoiseScale);
+
+                float HeightLimitLerp =
+                    FMath::Clamp(static_cast<float>(z) / static_cast<float>(VOXEL_GRID_SIZE * VOXEL_CHUNK_HEIGHT), 0.0f, 1.0f);
+                CaveValue -= FMath::Lerp(GenAsset->CaveNoiseFalloff.X, GenAsset->CaveNoiseFalloff.Y, HeightLimitLerp);
+
+                if (CaveValue < GenAsset->CaveCutoff) continue;
+
+                // Calculate voxel layers
+                int TerrainHeightDiff = TerrainHeightInt - z;
+
+                uint8 VoxelType = 1;
+
+                for (const FTerrainLayer& TerrainLayer : (*TerrainLayers))
+                {
+                    if (TerrainHeightDiff <= TerrainLayer.MaxDepth)
+                    {
+                        float CurBlockChoice = BlockChoice - (TerrainLayer.LayerChanceVariation * DetailValue);
+                        if (CurBlockChoice < TerrainLayer.LayerChance)
+                        {
+                            VoxelType = TerrainLayer.VoxelType;
+                            break;
+                        }
+                    }
+                }
+
+                SetVoxelLocal(FIntVector(x, y, z), VoxelType);
+            }
+        }
+    }
+
+    // TOOD: Change to UpdateMaterialDirtySubGrids() function
     // Update material data for all grids
     for (FVoxelGrid* Grid : SubGridsArray)
     {

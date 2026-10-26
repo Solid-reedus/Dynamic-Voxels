@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "VoxelGenerationAsset.h"
 #include "VoxelWorld.generated.h"
 
 class AVoxelChunk;
@@ -15,6 +16,9 @@ class DYNAMICVOXELS_API AVoxelWorld : public AActor
     GENERATED_BODY()
 
 public:
+    UPROPERTY(EditAnywhere)
+    UVoxelGenerationAsset* GenerationAsset = nullptr;
+
     UPROPERTY(EditAnywhere)
     UTexture2DArray* VoxelTextures = nullptr;
 

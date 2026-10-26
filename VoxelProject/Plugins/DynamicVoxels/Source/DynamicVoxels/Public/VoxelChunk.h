@@ -5,6 +5,7 @@
 #include "VoxelChunk.generated.h"
 
 class AVoxelWorld;
+class UVoxelGenerationAsset;
 
 UCLASS()
 class DYNAMICVOXELS_API AVoxelChunk : public AVoxelBase
@@ -28,7 +29,8 @@ protected:
     void InitializeChunk(uint32 InVoxelSize,
                          UMaterial* InBaseMaterial,
                          UTexture2DArray* InVoxelTextures,
-                         AVoxelWorld* InVoxelWorld);
+                         AVoxelWorld* InVoxelWorld,
+                         UVoxelGenerationAsset* GenerationAsset);
 
     void ApplyVoxelEditLocal(const TMap<FIntVector, uint8>& Edits);
 
@@ -47,5 +49,5 @@ private:
     // Store pointers to the subgrids as flat array for faster access
     TArray<FVoxelGrid*> SubGridsArray;
 
-    void GenerateVoxelData(uint32 voxelSize);
+    void GenerateVoxelData(UVoxelGenerationAsset* GenerationAsset);
 };

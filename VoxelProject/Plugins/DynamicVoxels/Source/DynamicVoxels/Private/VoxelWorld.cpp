@@ -171,7 +171,7 @@ void AVoxelWorld::CreateNewChunk(const FIntVector3& chunkPosition)
     FActorSpawnParameters spawnInfo = {};
 
     AVoxelChunk* voxelChunk = GetWorld()->SpawnActor<AVoxelChunk>(location, rotation, spawnInfo);
-    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures, this);
+    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures, this, GenerationAsset);
 
     m_voxelChunkInstances.Add(chunkPosition, voxelChunk);
 }
