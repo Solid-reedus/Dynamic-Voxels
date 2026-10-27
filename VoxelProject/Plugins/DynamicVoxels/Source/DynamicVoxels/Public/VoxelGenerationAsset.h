@@ -103,6 +103,11 @@ public:
 
     UPROPERTY(EditAnywhere, Category = "Biome 2")
     TArray<FStructureSpawnInfo> B2Structures;
+
+    /* ========================================================== */
+
+    FIntVector StructureBoundsMin = FIntVector(INT32_MAX);
+    FIntVector StructureBoundsMax = FIntVector(INT32_MIN);
 };
 
 /**

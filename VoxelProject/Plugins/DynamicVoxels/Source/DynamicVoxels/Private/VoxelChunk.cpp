@@ -124,71 +124,7 @@ void AVoxelChunk::GenerateVoxelData(UVoxelGenerationAsset* GenAsset)
 
     ChunkPosition = RelativePosition / VOXEL_GRID_SIZE;
 
-    // Basic terrain generation, will be optimized and improved in the future
-    /*
-    for (int y = -1; y <= static_cast<int>(VOXEL_GRID_SIZE); y++)
-    {
-        for (int x = -1; x <= static_cast<int>(VOXEL_GRID_SIZE); x++)
-        {
-            FIntVector2 topDownPosition = FIntVector2(x + relativePosition.X, y + relativePosition.Y);
-
-            double perlin2DValBiome = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 200.0) * 0.5 + 0.5;
-
-            double perlin2DVal = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 160.0) * 0.5 + 0.5;
-            if (perlin2DValBiome > 0.5) topDownPosition += FIntVector2(100, 100);
-            double perlin2DValDetail = FMath::PerlinNoise2D(FVector2D(topDownPosition) / 64.0) * 0.5 + 0.5;
-
-            int terrainValue = static_cast<int>(perlin2DVal * perlin2DVal * 80.0 + 48.0 + perlin2DValDetail * 20.0);
-            if (perlin2DValBiome > 0.5) terrainValue -= static_cast<int>(perlin2DValBiome * 10.0);
-#if SUPERFLAT_WORLDGEN
-            terrainValue = 48;
-#endif
-            terrainValue -= relativePosition.Z;
-
-            double BlockChoice = FMath::RandRange(0.0, 1.0);
-            BlockChoice += perlin2DValDetail * 3;
-
-            for (int z = -1; z <= static_cast<int>(VOXEL_GRID_SIZE * VOXEL_CHUNK_HEIGHT); z++)
-            {
-                FIntVector3 worldPosition = FIntVector3(x, y, z) + relativePosition;
-                float caveValue = FMath::PerlinNoise3D(FVector(worldPosition) / 16.0);
-
-                if (z >= terrainValue)
-                {
-                    float falloff = static_cast<float>(FMath::Abs(z - terrainValue)) * 0.08;
-                    float applied = caveValue - falloff;
-
-                    if (applied > 0.5f) SetVoxelLocal(FIntVector3(x, y, z), 7);  // Cobble
-                }
-                else if (z >= terrainValue + 10)
-                {
-                    break;
-                }
-                else
-                {
-                    uint8 blockType = 1;  // Stone
-                    if (perlin2DValBiome > 0.5)
-                    {
-                        if (terrainValue - z < 9) blockType = 4;  // Sand
-                    }
-                    else
-                    {
-                        if (terrainValue - z < 3 && BlockChoice > 1.6f)
-                            blockType = 2;  // Grass
-                        else if (terrainValue - z < 9)
-                            blockType = 3;  // Dirt
-                    }
-
-                    float falloff = (128.0f - static_cast<float>(worldPosition.Z)) / 64.0f - 1.0f;
-                    float applied = caveValue + falloff;
-
-                    if (applied > -0.2f) SetVoxelLocal(FIntVector3(x, y, z), blockType);
-                }
-            }
-        }
-    }
-    */
-
+    // Terrain Generation
     for (int y = -1; y <= static_cast<int>(VOXEL_GRID_SIZE); ++y)
     {
         for (int x = -1; x <= static_cast<int>(VOXEL_GRID_SIZE); ++x)
@@ -240,7 +176,7 @@ void AVoxelChunk::GenerateVoxelData(UVoxelGenerationAsset* GenAsset)
 
                 // Perform caves
                 float CaveValue = FMath::PerlinNoise3D(
-                    FVector(x + RelativePosition.X, y + RelativePosition.Y, z + RelativePosition.Z) / GenAsset->CaveNoiseScale);
+                    FVector(x + RelativePosition.X, y + RelativePosition.Y, z) / GenAsset->CaveNoiseScale);
 
                 float HeightLimitLerp =
                     FMath::Clamp(static_cast<float>(z) / static_cast<float>(VOXEL_GRID_SIZE * VOXEL_CHUNK_HEIGHT), 0.0f, 1.0f);
@@ -271,10 +207,91 @@ void AVoxelChunk::GenerateVoxelData(UVoxelGenerationAsset* GenAsset)
         }
     }
 
-    // TOOD: Change to UpdateMaterialDirtySubGrids() function
-    // Update material data for all grids
-    for (FVoxelGrid* Grid : SubGridsArray)
+    // Spawn Structures
+    FIntVector StructureChunkMin = GenAsset->StructureBoundsMax * -1;
+    FIntVector StructureChunkMax = (GenAsset->StructureBoundsMin * -1) + FIntVector(static_cast<int>(VOXEL_GRID_SIZE));
+
+    for (int y = StructureChunkMin.Y; y <= StructureChunkMax.Y; ++y)
     {
-        Grid->UpdateMaterialData();
+        for (int x = StructureChunkMin.X; x <= StructureChunkMax.X; ++x)
+        {
+            // Get the terrain Height Again
+            FVector2D VoxelPosition2D = FVector2D(x + RelativePosition.X, y + RelativePosition.Y);
+            FIntVector2 VoxelPositionInt = FIntVector2(x + RelativePosition.X, y + RelativePosition.Y);
+
+            float BiomeValue = FMath::PerlinNoise2D(VoxelPosition2D / GenAsset->BiomeScale) * 0.5f + 0.5f;
+            float BiomeValueDetail = FMath::PerlinNoise2D(VoxelPosition2D / (GenAsset->BiomeScale * 0.5f)) * 0.5f + 0.5f;
+            BiomeValue = BiomeValue * 0.7f + BiomeValueDetail * 0.3f;
+
+            float TerrainValue = FMath::PerlinNoise2D(VoxelPosition2D / GenAsset->TerrainNoiseScale) * 0.5f + 0.5f;
+            float DetailValue = FMath::PerlinNoise2D(VoxelPosition2D / GenAsset->DetailNoiseScale) * 0.5f + 0.5f;
+
+            float TerrainHeight = 0.0f;
+            TArray<FStructureSpawnInfo>* StructuresSpawn = nullptr;
+
+            if (BiomeValue < 0.5f)
+            {
+                TerrainHeight = GenAsset->B1BaseTerrainHeight + TerrainValue * GenAsset->B1TerrainNoiseAmplitude +
+                                DetailValue * GenAsset->B1DetailNoiseAmplitude;
+
+                StructuresSpawn = &GenAsset->B1Structures;
+            }
+            else
+            {
+                TerrainHeight = GenAsset->B2BaseTerrainHeight + TerrainValue * GenAsset->B2TerrainNoiseAmplitude +
+                                DetailValue * GenAsset->B2DetailNoiseAmplitude;
+
+                StructuresSpawn = &GenAsset->B2Structures;
+
+                if (GenAsset->BiomeBlending > 0.0f)
+                {
+                    float TerrainHeight2 = GenAsset->B1BaseTerrainHeight + TerrainValue * GenAsset->B1TerrainNoiseAmplitude +
+                                           DetailValue * GenAsset->B1DetailNoiseAmplitude;
+
+                    float BiomeBorderLerp = FMath::Clamp((BiomeValue - 0.5f) / GenAsset->BiomeBlending, 0.0f, 1.0f);
+                    BiomeBorderLerp = FMath::SmoothStep(0.0f, 1.0f, BiomeBorderLerp);
+                    TerrainHeight = FMath::Lerp(TerrainHeight2, TerrainHeight, BiomeBorderLerp);
+                }
+            }
+
+            int TerrainHeightInt = static_cast<int>(TerrainHeight);
+
+            // Perform caves
+            float CaveValue = FMath::PerlinNoise3D(
+                FVector(x + RelativePosition.X, y + RelativePosition.Y, TerrainHeightInt - 1) / GenAsset->CaveNoiseScale);
+
+            float HeightLimitLerp = FMath::Clamp(
+                static_cast<float>(TerrainHeightInt - 1) / static_cast<float>(VOXEL_GRID_SIZE * VOXEL_CHUNK_HEIGHT),
+                0.0f,
+                1.0f);
+            CaveValue -= FMath::Lerp(GenAsset->CaveNoiseFalloff.X, GenAsset->CaveNoiseFalloff.Y, HeightLimitLerp);
+            
+            // Dont't spawn structure
+            if (CaveValue < GenAsset->CaveCutoff) continue;
+
+            float StructureChoice = RandomFloat01(VoxelPositionInt, 21);
+            //float StructureChoice = (VoxelPositionInt.X % 9 == 0 && VoxelPositionInt.Y % 9 == 0) ? 0.0f : 1.0f;
+
+            for (const FStructureSpawnInfo& Structure : (*StructuresSpawn))
+            {
+                if (StructureChoice < Structure.SpawnChance)
+                {
+                    for (const FStructuresVoxel& Voxel : Structure.StructureAsset->VoxelData)
+                    {
+                        FIntVector Final = Voxel.Position + FIntVector(x, y, TerrainHeightInt);
+
+                        if (Final.X >= -1 && Final.X <= static_cast<int>(VOXEL_GRID_SIZE) && Final.Y >= -1 &&
+                            Final.Y <= static_cast<int>(VOXEL_GRID_SIZE))
+                        {
+                            SetVoxelLocal(Final, Voxel.VoxelType);
+                        }
+                    }
+                    break; // Dont spawn multiple structures on the same block
+                }
+            }
+        }
     }
+
+    // Update material data for all dirty grids
+    UpdateMaterialDirtySubGrids();
 }
