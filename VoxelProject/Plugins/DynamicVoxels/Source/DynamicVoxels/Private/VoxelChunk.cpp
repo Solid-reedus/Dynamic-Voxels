@@ -269,11 +269,14 @@ void AVoxelChunk::GenerateVoxelData(UVoxelGenerationAsset* GenAsset)
             // Dont't spawn structure
             if (CaveValue < GenAsset->CaveCutoff) continue;
 
-            float StructureChoice = RandomFloat01(VoxelPositionInt, 21);
             //float StructureChoice = (VoxelPositionInt.X % 9 == 0 && VoxelPositionInt.Y % 9 == 0) ? 0.0f : 1.0f;
 
+            int SeedAdvance = 19;
             for (const FStructureSpawnInfo& Structure : (*StructuresSpawn))
             {
+                float StructureChoice = RandomFloat01(VoxelPositionInt, SeedAdvance);
+                SeedAdvance += 21;
+
                 if (StructureChoice < Structure.SpawnChance)
                 {
                     for (const FStructuresVoxel& Voxel : Structure.StructureAsset->VoxelData)
