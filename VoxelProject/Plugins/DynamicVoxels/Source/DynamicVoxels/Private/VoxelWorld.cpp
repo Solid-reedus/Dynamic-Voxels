@@ -57,6 +57,28 @@ void AVoxelWorld::BeginPlay()
 
     LoadBaseMaterial();
 
+    // Calculate the largerst bounds of all loaded structures
+    if (GenerationAsset)
+    {
+        GenerationAsset->StructureBoundsMin = FIntVector(INT32_MAX);
+        GenerationAsset->StructureBoundsMax = FIntVector(INT32_MIN);
+
+        for (const FStructureSpawnInfo& Structure : GenerationAsset->B1Structures)
+        {
+            GenerationAsset->StructureBoundsMin =
+                GenerationAsset->StructureBoundsMin.ComponentMin(Structure.StructureAsset->BoundsOrigin);
+            GenerationAsset->StructureBoundsMax = GenerationAsset->StructureBoundsMax.ComponentMax(
+                Structure.StructureAsset->BoundsOrigin + Structure.StructureAsset->BoundsScale);
+        }
+        for (const FStructureSpawnInfo& Structure : GenerationAsset->B2Structures)
+        {
+            GenerationAsset->StructureBoundsMin =
+                GenerationAsset->StructureBoundsMin.ComponentMin(Structure.StructureAsset->BoundsOrigin);
+            GenerationAsset->StructureBoundsMax = GenerationAsset->StructureBoundsMax.ComponentMax(
+                Structure.StructureAsset->BoundsOrigin + Structure.StructureAsset->BoundsScale);
+        }
+    }
+
     APawn* playerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
     FIntVector2 curPawnChunkPosition;
     if (playerPawn)
@@ -171,7 +193,7 @@ void AVoxelWorld::CreateNewChunk(const FIntVector3& chunkPosition)
     FActorSpawnParameters spawnInfo = {};
 
     AVoxelChunk* voxelChunk = GetWorld()->SpawnActor<AVoxelChunk>(location, rotation, spawnInfo);
-    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures, this);
+    voxelChunk->InitializeChunk(VoxelSize, BaseMaterial, VoxelTextures, this, GenerationAsset);
 
     m_voxelChunkInstances.Add(chunkPosition, voxelChunk);
 }

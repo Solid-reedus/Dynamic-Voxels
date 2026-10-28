@@ -177,10 +177,26 @@ bool FVSEViewportClient::InputKey(const FInputKeyEventArgs& EventArgs)
         // Only place voxel if its not air
         if (Viewport->Asset->EditorVoxelType != 0)
         {
-            uint8& Voxel = Viewport->Asset->VoxelData.FindOrAdd(Final);
-            Voxel = Viewport->Asset->EditorVoxelType;
+            // Ensure that the currently edited voxel does not already exist
+            bool AlreadyExists = false;
+            for (const FStructuresVoxel& Voxel : Viewport->Asset->VoxelData)
+            {
+                if (Voxel.Position == Final)
+                {
+                    AlreadyExists = true;
+                    break;
+                }
+            }
 
-            Viewport->RegenerateVoxelMesh();
+            if (!AlreadyExists)
+            {
+                FStructuresVoxel NewVoxel;
+                NewVoxel.Position = Final;
+                NewVoxel.VoxelType = Viewport->Asset->EditorVoxelType;
+                Viewport->Asset->VoxelData.Add(NewVoxel);
+
+                Viewport->RegenerateVoxelMesh();
+            }
         }
     }
     // Remove Voxel
@@ -193,7 +209,17 @@ bool FVSEViewportClient::InputKey(const FInputKeyEventArgs& EventArgs)
 
         Final.Z -= Viewport->Asset->EditorHeightOffset;
 
-        Viewport->Asset->VoxelData.Remove(Final);
+        // Find and remove voxel from voxel data
+        int CurIndex = 0;
+        for (const FStructuresVoxel& Voxel : Viewport->Asset->VoxelData)
+        {
+            if (Voxel.Position == Final)
+            {
+                Viewport->Asset->VoxelData.RemoveAt(CurIndex, EAllowShrinking::Yes);
+                break;
+            }
+            CurIndex++;
+        }
 
         Viewport->RegenerateVoxelMesh();
     }
@@ -318,14 +344,14 @@ void SVSEViewport::RegenerateVoxelMesh()
     BoundsMax = FIntVector(INT32_MIN);
     bool bValidVoxels = false;
 
-    for (const auto& Voxel : Asset->VoxelData)
+    for (const FStructuresVoxel& Voxel : Asset->VoxelData)
     {
-        if (Voxel.Value != 0)
+        if (Voxel.VoxelType != 0)
         {
-            FVector VoxelPos = FVector(Voxel.Key + FIntVector(0, 0, Asset->EditorHeightOffset)) * 100.0f;
+            FVector VoxelPos = FVector(Voxel.Position + FIntVector(0, 0, Asset->EditorHeightOffset)) * 100.0f;
 
-// If set to 0, less lag spikes with large structures, but no face culling
-#if 1
+// Face culling will currently not work
+#if 0
             uint8* XPos = Asset->VoxelData.Find(Voxel.Key + FIntVector(1, 0, 0));
             if (XPos == nullptr || (*XPos) == 0) AddFace(VoxelPos, EFaceDirection::POSITIVE_X, Voxel.Value);
 
@@ -344,16 +370,16 @@ void SVSEViewport::RegenerateVoxelMesh()
             uint8* ZNeg = Asset->VoxelData.Find(Voxel.Key + FIntVector(0, 0, -1));
             if (ZNeg == nullptr || (*ZNeg) == 0) AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, Voxel.Value);
 #else
-            AddFace(VoxelPos, EFaceDirection::POSITIVE_X, Voxel.Value);
-            AddFace(VoxelPos, EFaceDirection::NEGATIVE_X, Voxel.Value);
-            AddFace(VoxelPos, EFaceDirection::POSITIVE_Y, Voxel.Value);
-            AddFace(VoxelPos, EFaceDirection::NEGATIVE_Y, Voxel.Value);
-            AddFace(VoxelPos, EFaceDirection::POSITIVE_Z, Voxel.Value);
-            AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, Voxel.Value);
+            AddFace(VoxelPos, EFaceDirection::POSITIVE_X, Voxel.VoxelType);
+            AddFace(VoxelPos, EFaceDirection::NEGATIVE_X, Voxel.VoxelType);
+            AddFace(VoxelPos, EFaceDirection::POSITIVE_Y, Voxel.VoxelType);
+            AddFace(VoxelPos, EFaceDirection::NEGATIVE_Y, Voxel.VoxelType);
+            AddFace(VoxelPos, EFaceDirection::POSITIVE_Z, Voxel.VoxelType);
+            AddFace(VoxelPos, EFaceDirection::NEGATIVE_Z, Voxel.VoxelType);
 #endif
 
-            BoundsMin = Voxel.Key.ComponentMin(BoundsMin);
-            BoundsMax = Voxel.Key.ComponentMax(BoundsMax);
+            BoundsMin = Voxel.Position.ComponentMin(BoundsMin);
+            BoundsMax = Voxel.Position.ComponentMax(BoundsMax);
             bValidVoxels = true;
         }
     }

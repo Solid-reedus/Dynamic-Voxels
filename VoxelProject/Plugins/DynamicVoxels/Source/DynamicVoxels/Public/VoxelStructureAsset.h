@@ -11,6 +11,19 @@
 #include "ProceduralMeshComponent.h"
 #include "VoxelStructureAsset.generated.h"
 
+USTRUCT()
+struct FStructuresVoxel
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY()
+    FIntVector Position;
+
+    UPROPERTY()
+    uint8 VoxelType;
+};
+
 /**
  *
  */
@@ -40,8 +53,8 @@ public:
     UPROPERTY(VisibleAnywhere, Category = "Data")
     FIntVector BoundsScale = FIntVector::ZeroValue;
 
-    UPROPERTY() // Removed EditAnywhere due to performance issues
-    TMap<FIntVector, uint8> VoxelData;
+    UPROPERTY()  // Removed EditAnywhere due to performance issues
+    TArray<FStructuresVoxel> VoxelData;
 };
 
 /**
